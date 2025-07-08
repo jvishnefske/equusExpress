@@ -4,8 +4,8 @@ This is a placeholder repository for a generic application. It serves as a start
 
 ## Badges
 
-[![GitHub Actions status](https://github.com/your-username/your-repo/workflows/CI/badge.svg)](https://github.com/your-username/your-repo/actions)
-[![SonarCloud Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=your-username_your-repo&metric=alert_status)](https://sonarcloud.io/dashboard?id=your-username_your-repo)
+[![GitHub Actions status](https://github.com/jvishnefske/equus_express/workflows/CI/badge.svg)](https://github.com/jvishnefske/equus_express/actions)
+[![SonarCloud Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=jvishnefske_equus_express&metric=alert_status)](https://sonarcloud.io/dashboard?id=jvishnefske_equus_express)
 
 ## Getting Started
 
