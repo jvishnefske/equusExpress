@@ -398,7 +398,8 @@ async def get_device_info(request: Request, device_id: str = Depends(get_authent
     # The Depends(get_authenticated_device_id) indicates this endpoint requires authentication.
 
     try:
-        conn = sqlite3.connect('secure_devices.db')
+        db_file = os.getenv("SQLITE_DB_PATH", 'secure_devices.db')
+        conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
         cursor.execute('''
                        SELECT device_id, first_seen, last_seen, status, ip_address
@@ -435,7 +436,8 @@ async def receive_telemetry(telemetry: TelemetryData, request: Request,
     device_id = telemetry.device_id # Use the ID from the payload after authentication check
 
     try:
-        conn = sqlite3.connect('secure_devices.db')
+        db_file = os.getenv("SQLITE_DB_PATH", 'secure_devices.db')
+        conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
 
         # Store telemetry data
@@ -473,7 +475,8 @@ async def update_device_status(status_update: StatusUpdate, request: Request,
     device_id = status_update.device_id # Use the ID from the payload after authentication check
 
     try:
-        conn = sqlite3.connect('secure_devices.db')
+        db_file = os.getenv("SQLITE_DB_PATH", 'secure_devices.db')
+        conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
 
         # Store status update
@@ -511,7 +514,8 @@ async def get_device_config(device_id: str, request: Request,
         raise HTTPException(status_code=403, detail="Access denied: Device ID mismatch.")
 
     try:
-        conn = sqlite3.connect('secure_devices.db')
+        db_file = os.getenv("SQLITE_DB_PATH", 'secure_devices.db')
+        conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
         cursor.execute('''
                        SELECT config
@@ -546,7 +550,8 @@ async def get_device_config(device_id: str, request: Request,
 async def list_devices():
     """List all devices (admin endpoint)"""
     try:
-        conn = sqlite3.connect('secure_devices.db')
+        db_file = os.getenv("SQLITE_DB_PATH", 'secure_devices.db')
+        conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
         cursor.execute('''
                        SELECT device_id, first_seen, last_seen, status, ip_address
@@ -578,7 +583,8 @@ async def list_devices():
 async def get_device_telemetry(device_id: str, limit: int = 100):
     """Get telemetry data for a specific device (admin endpoint)"""
     try:
-        conn = sqlite3.connect('secure_devices.db')
+        db_file = os.getenv("SQLITE_DB_PATH", 'secure_devices.db')
+        conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
         cursor.execute('''
                        SELECT timestamp, data, received_at
