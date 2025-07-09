@@ -1,0 +1,24 @@
+body { font-family: sans-serif; margin: 20px; line-height: 1.6; }
+.container { max-width: 1200px; margin: auto; padding: 0 15px; }
+h1 { text-align: center; color: #333; }
+.device-card {
+    border: 1px solid #ddd;
+    padding: 20px;
+    margin-bottom: 15px;
+    border-radius: 8px;
+    background-color: #f9f9f9;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+.device-card h2 { color: #0056b3; margin-top: 0; }
+.device-card p { margin: 5px 0; }
+pre {
+    background-color: #eee;
+    padding: 15px;
+    border-radius: 5px;
+    overflow-x: auto;
+    font-family: 'Courier New', monospace;
+    white-space: pre-wrap; /* Ensures long lines wrap */
+    word-wrap: break-word; /* Ensures long words break */
+}
+.no-devices { text-align: center; color: #666; padding: 20px; }
+.error-message { color: red; text-align: center; padding: 20px; }
