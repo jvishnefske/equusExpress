@@ -5,6 +5,7 @@ import httpx
 # Import the classes to be tested
 from equus_express.client import SecureAPIClient, DeviceAgent
 import os
+import socket # Added import for socket
 
 
 # Constants for testing
