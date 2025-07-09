@@ -6,6 +6,7 @@ from unittest.mock import patch, MagicMock, mock_open
 from datetime import datetime, timezone
 import time
 import httpx
+import random
 
 # Import the classes to be tested
 from equus_express.client import SecureAPIClient, DeviceAgent
@@ -18,7 +19,8 @@ MOCK_PUBLIC_KEY_PEM = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCA
 MOCK_PRIVATE_KEY_PEM = (
     b"-----BEGIN PRIVATE KEY-----MOCK_PRIVATE_KEY-----END PRIVATE KEY-----"
 )
-MOCK_IP_ADDRESS = "192.168.1.100" # New constant for mock IP address
+# Generate a random IP address in a private range (e.g., 192.168.X.Y)
+MOCK_IP_ADDRESS = f"192.168.{random.randint(0, 255)}.{random.randint(1, 254)}"
 
 
 @pytest.fixture
