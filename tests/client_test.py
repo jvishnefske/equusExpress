@@ -1,10 +1,6 @@
 import pytest
-import os
-import shutil
-import json
 from unittest.mock import patch, MagicMock, mock_open
 from datetime import datetime, timezone
-import time
 import httpx
 # Import the classes to be tested
 from equus_express.client import SecureAPIClient, DeviceAgent
@@ -57,7 +53,7 @@ def mock_crypto():
             "equus_express.client.rsa.generate_private_key"
         ) as mock_generate_private_key,
         patch("equus_express.client.serialization") as mock_serialization,
-        patch("equus_express.client.default_backend") as mock_default_backend,
+        patch("equus_express.client.default_backend"),
         patch("equus_express.client.open", m_open),
         patch("equus_express.client.os.path.exists") as mock_os_path_exists,
         patch("equus_express.client.os.makedirs") as mock_os_makedirs,
