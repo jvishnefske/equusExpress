@@ -40,4 +40,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Start the application
-CMD ["uvicorn", "equus_express.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "equus_express.server:app", "--host", "0.0.0.0", "--port", "8000"]

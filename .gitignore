@@ -9,3 +9,6 @@ wheels/
 # Virtual environments
 .venv
 .aider*
+/.coverage
+/coverage.xml
+/secure_devices.db
