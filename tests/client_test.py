@@ -13,7 +13,7 @@ from equus_express.client import SecureAPIClient, DeviceAgent
 
 
 # Constants for testing
-TEST_BASE_URL = "http://mock-server"
+TEST_BASE_URL = "https://mock-server"
 TEST_DEVICE_ID = "test_client_device"
 MOCK_PUBLIC_KEY_PEM = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsdfadsfadsfasdfasdf\n-----END PUBLIC KEY-----\n"
 MOCK_PRIVATE_KEY_PEM = (
