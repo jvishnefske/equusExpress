@@ -1,6 +1,8 @@
-# Placeholder App 🐎
+# Equus Express 🐎
 
-This is a placeholder repository for a generic application. It serves as a starting point for new projects.
+**Automation Engineers, are you tired of the complexity of managing and monitoring your custom industrial devices running critical batch processes?** ⚙️
+
+Equus Express provides a robust, secure 🔒, and scalable solution for device registration, telemetry collection, and remote management. Empower your custom hardware to seamlessly integrate with your operations, ensuring reliable data flow 📈 and actionable insights for your automated workflows. Take control of your industrial IoT deployment with confidence. ✨
 
 ## Badges
 
@@ -12,50 +14,65 @@ This is a placeholder repository for a generic application. It serves as a start
 [![SonarCloud Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=jvishnefske_equusExpress&metric=vulnerabilities)](https://sonarcloud.io/dashboard?id=jvishnefske_equusExpress)
 
 
+## Getting Started 🚀
+
+# Certificate Provisioning System Setup Guide 📜
+
+This guide walks you through setting up a complete certificate provisioning system for Raspberry Pi devices 🍓 with FastAPI.
+
+## Architecture Overview 🏗️
+
+1.  **API Server** 🖥️ (HTTP) - Handles public key registration, telemetry, and device management. Designed to run behind a reverse proxy (e.g., Traefik) that handles HTTPS/SSL.
+2.  **Device Client** 🔌 - Automatically generates an RSA public/private key pair on first run and registers its public key with the server. Sends telemetry and status updates.
+3.  **Web Dashboard** 📊 - A simple web interface provided by the server to view connected devices and their telemetry.
+
+## Prerequisites 🛠️
+
+### Server Requirements 💻
+-   Python 3.8+
+-   SQLite3
+-   Network access for clients (typically via a proxy)
+
+### Client Requirements 📱
+-   Python 3.8+
+-   `cryptography` library for key generation
+-   Network connectivity to the server (or proxy)
+
 ## Getting Started
 
-# Certificate Provisioning System Setup Guide
+### 1. Install Dependencies 📦
 
-This guide walks you through setting up a complete certificate provisioning system for Raspberry Pi devices with FastAPI.
-
-## Architecture Overview
-
-1. **Provisioning Server** (HTTP) - Handles certificate requests and approval workflow
-2. **Secure Server** (HTTPS with mTLS) - Provides authenticated API services
-3. **Raspberry Pi Client** - Requests certificates and operates with mTLS
-4. **Admin Interface** - Web-based certificate approval system
-
-## Prerequisites
-
-### Server Requirements
-- Python 3.8+
-- OpenSSL
-- SQLite3
-- Network access for clients
-
-### Client Requirements (Raspberry Pi)
-- Raspberry Pi OS
-- Python 3.8+
-- Network connectivity to servers
-
-## Step 1: Generate Root Certificates
-
-First, create the Certificate Authority (CA) and server certificates:
+Install the required Python packages using `uv`:
 
 ```bash
-# Create certificate directory
-mkdir -p /opt/iot-certs
-cd /opt/iot-certs
+uv pip install .[dev] # Install main and development dependencies from pyproject.toml
+```
 
-# Generate CA private key
-openssl genrsa -out ca.key 4096
+### 2. Run the Server ▶️
 
-# Generate CA certificate (valid for 10 years)
-openssl req -new -x509 -days 3650 -key ca.key -out ca.crt \
-  -subj "/C=US/ST=State/L=City/O=IoT Company/CN=IoT-CA"
+The server runs on HTTP (default port 8000) and is designed to be placed behind an SSL-terminating proxy like Traefik.
 
-# Generate server private key
-openssl genrsa -out server.key 4096
+```bash
+uv run python3 -m equus_express.server
+```
 
-# Generate server certificate signing request
-openssl req -new -key server.key -out server.c
+Once running, you can access the server's health check at `http://localhost:8000/health`. ✅
+
+### 3. Run the Client ▶️
+
+The client will generate a new RSA key pair in `~/.equus_express/keys/` on its first run and register its public key with the server.
+
+```bash
+uv run python3 -m equus_express.client http://localhost:8000 [your_device_id]
+```
+Replace `http://localhost:8000` with the actual URL of your server (or proxy). `[your_device_id]` is optional; if not provided, it defaults to your hostname.
+
+### 4. View the Dashboard 🌐
+
+Open your web browser to access the device dashboard:
+
+```
+http://localhost:8000/dashboard
+```
+
+This dashboard will display registered devices and their latest telemetry data. 📈

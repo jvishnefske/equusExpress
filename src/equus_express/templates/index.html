@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Equus Express IoT Server</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        header {
+            background-color: #0056b3;
+            color: white;
+            padding: 1rem 0;
+            text-align: center;
+        }
+        main {
+            flex: 1;
+            padding: 20px;
+            max-width: 800px;
+            margin: 20px auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2 {
+            color: #0056b3;
+        }
+        a {
+            color: #0056b3;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        footer {
+            background-color: #333;
+            color: white;
+            text-align: center;
+            padding: 1rem 0;
+            margin-top: auto;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Welcome to Equus Express IoT Server</h1>
+    </header>
+    <main>
+        <p>This is the landing page for your Secure IoT API Server. From here, you can explore various functionalities and endpoints.</p>
+
+        <h2>API Endpoints:</h2>
+        <ul>
+            <li><a href="/docs">API Documentation (Swagger UI)</a></li>
+            <li><a href="/redoc">API Documentation (ReDoc)</a></li>
+            <li><a href="/health">Health Check</a></li>
+            <li><a href="/dashboard">Device Dashboard</a></li>
+        </ul>
+
+        <h2>Getting Started:</h2>
+        <p>
+            To interact with the API, you'll typically use an IoT device (like the <code>equus_express.client.DeviceAgent</code>).
+            Devices will register themselves and send telemetry data to this server.
+        </p>
+        <p>
+            You can find more information in the API documentation or by referring to the project's README.
+        </p>
+    </main>
+    <footer>
+        <p>&copy; 2025 Equus Express. All rights reserved.</p>
+    </footer>
+</body>
+</html>
