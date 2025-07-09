@@ -260,12 +260,15 @@ class DeviceAgent:
     def start(self):
         """Start the device agent"""
         logger.info("Starting device agent...")
-        self.running = True
 
         # Perform connection test and registration
         if not self.client.test_connection():
             logger.error("Failed initial connection and registration.")
+            self.running = False # Explicitly set to False on failure
             return False
+
+        # If connection is successful, set running to True
+        self.running = True
 
         # Send initial status after successful connection/registration
         self.client.update_status(

@@ -94,10 +94,10 @@ def secure_client_no_keys_exist(
     """SecureAPIClient instance where no keys exist initially."""
     with (
         patch(
-            "src.equus_express.client.os.path.exists",
+            "equus_express.client.os.path.exists",
             side_effect=[False, False],
         ),
-        patch("src.equus_express.client.os.makedirs"),
+        patch("equus_express.client.os.makedirs"),
     ):
         client = SecureAPIClient(
             base_url=TEST_BASE_URL,
@@ -117,7 +117,7 @@ def secure_client_keys_exist(tmp_key_dir, mock_crypto, mock_httpx_client):
         f.write(b"dummy public key")
 
     with patch(
-        "src.equus_express.client.os.path.exists", side_effect=[True, True]
+        "equus_express.client.os.path.exists", side_effect=[True, True]
     ):  # First call for private, second for public
         client = SecureAPIClient(
             base_url=TEST_BASE_URL,
