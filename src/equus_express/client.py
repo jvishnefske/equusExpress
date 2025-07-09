@@ -30,10 +30,12 @@ CLIENT_PUBLIC_KEY_FILE = os.path.join(DEFAULT_KEY_DIR, "device.pub")
 
 
 class SecureAPIClient:
-    def __init__(self,
-                 base_url: str,
-                 device_id: str = None,
-                 key_dir: str = DEFAULT_KEY_DIR):
+    def __init__(
+        self,
+        base_url: str,
+        device_id: str = None,
+        key_dir: str = DEFAULT_KEY_DIR,
+    ):
         """
         Initialize the secure API client with public key management.
 
@@ -42,7 +44,7 @@ class SecureAPIClient:
             device_id: Device identifier
             key_dir: Directory to store generated private/public keys
         """
-        self.base_url = base_url.rstrip('/')
+        self.base_url = base_url.rstrip("/")
         self.device_id = device_id or socket.gethostname()
         self.key_dir = key_dir
         self.private_key = None
@@ -53,15 +55,21 @@ class SecureAPIClient:
 
         # Create session (no client cert for now, will rely on new auth)
         self.session = requests.Session()
-        self.session.verify = False # Assuming Traefik handles server SSL, or running HTTP
-        urllib3.disable_warnings(InsecureRequestWarning) # Suppress warnings if verify=False
+        self.session.verify = (
+            False  # Assuming Traefik handles server SSL, or running HTTP
+        )
+        urllib3.disable_warnings(
+            InsecureRequestWarning
+        )  # Suppress warnings if verify=False
 
         # Set default headers, including device ID for identification
-        self.session.headers.update({
-            'User-Agent': f'SecureClient/{self.device_id}',
-            'Content-Type': 'application/json',
-            'X-Device-Id': self.device_id # Temporarily pass device_id in header for simplified auth
-        })
+        self.session.headers.update(
+            {
+                "User-Agent": f"SecureClient/{self.device_id}",
+                "Content-Type": "application/json",
+                "X-Device-Id": self.device_id,  # Temporarily pass device_id in header for simplified auth
+            }
+        )
 
         logger.info(f"Initialized client for device: {self.device_id}")
 
@@ -72,22 +80,22 @@ class SecureAPIClient:
 
         if os.path.exists(private_key_path) and os.path.exists(public_key_path):
             with open(private_key_path, "rb") as f:
-                self.private_key = serialization.load_pem_private_key(f.read(), password=None, backend=default_backend())
+                self.private_key = serialization.load_pem_private_key(
+                    f.read(), password=None, backend=default_backend()
+                )
             with open(public_key_path, "rb") as f:
-                self.public_key_pem = f.read().decode('utf-8')
+                self.public_key_pem = f.read().decode("utf-8")
             logger.info("Existing device keys loaded.")
         else:
             logger.info("Generating new device keys...")
             self.private_key = rsa.generate_private_key(
-                public_exponent=65537,
-                key_size=2048,
-                backend=default_backend()
+                public_exponent=65537, key_size=2048, backend=default_backend()
             )
             # Serialize private key
             pem_private_key = self.private_key.private_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PrivateFormat.PKCS8,
-                encryption_algorithm=serialization.NoEncryption()
+                encryption_algorithm=serialization.NoEncryption(),
             )
             with open(private_key_path, "wb") as f:
                 f.write(pem_private_key)
@@ -96,12 +104,14 @@ class SecureAPIClient:
             public_key = self.private_key.public_key()
             self.public_key_pem = public_key.public_bytes(
                 encoding=serialization.Encoding.PEM,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo
-            ).decode('utf-8')
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            ).decode("utf-8")
             with open(public_key_path, "w") as f:
                 f.write(self.public_key_pem)
 
-            logger.info(f"New device keys generated and saved to {self.key_dir}")
+            logger.info(
+                f"New device keys generated and saved to {self.key_dir}"
+            )
 
     def _make_request(self, method: str, endpoint: str, **kwargs):
         """Make a request with error handling and logging"""
@@ -132,9 +142,13 @@ class SecureAPIClient:
         except requests.exceptions.HTTPError as e:
             logger.error(f"HTTP error: {e}")
             if e.response.status_code == 401:
-                raise PermissionError("Authentication failed - invalid client certificate")
+                raise PermissionError(
+                    "Authentication failed - invalid client certificate"
+                )
             elif e.response.status_code == 403:
-                raise PermissionError("Access denied - insufficient permissions")
+                raise PermissionError(
+                    "Access denied - insufficient permissions"
+                )
             else:
                 raise
         except requests.exceptions.RequestException as e:
@@ -143,29 +157,35 @@ class SecureAPIClient:
 
     def get(self, endpoint: str, **kwargs):
         """Make a GET request"""
-        return self._make_request('GET', endpoint, **kwargs)
+        return self._make_request("GET", endpoint, **kwargs)
 
     def post(self, endpoint: str, data=None, json=None, **kwargs):
         """Make a POST request"""
-        return self._make_request('POST', endpoint, data=data, json=json, **kwargs)
+        return self._make_request(
+            "POST", endpoint, data=data, json=json, **kwargs
+        )
 
     def put(self, endpoint: str, data=None, json=None, **kwargs):
         """Make a PUT request"""
-        return self._make_request('PUT', endpoint, data=data, json=json, **kwargs)
+        return self._make_request(
+            "PUT", endpoint, data=data, json=json, **kwargs
+        )
 
     def delete(self, endpoint: str, **kwargs):
         """Make a DELETE request"""
-        return self._make_request('DELETE', endpoint, **kwargs)
+        return self._make_request("DELETE", endpoint, **kwargs)
 
     def register_device(self):
         """Register the device's public key with the server."""
         if not self.public_key_pem:
             raise RuntimeError("Public key not available for registration.")
 
-        logger.info(f"Attempting to register device '{self.device_id}' with server...")
+        logger.info(
+            f"Attempting to register device '{self.device_id}' with server..."
+        )
         registration_payload = {
             "device_id": self.device_id,
-            "public_key": self.public_key_pem
+            "public_key": self.public_key_pem,
         }
         try:
             response = self.post("/api/register", json=registration_payload)
@@ -188,7 +208,7 @@ class SecureAPIClient:
         telemetry_payload = {
             "device_id": self.device_id,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "data": data
+            "data": data,
         }
         return self.post("/api/telemetry", json=telemetry_payload)
 
@@ -202,7 +222,7 @@ class SecureAPIClient:
             "device_id": self.device_id,
             "status": status,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "details": details or {}
+            "details": details or {},
         }
         return self.post("/api/device/status", json=status_payload)
 
@@ -217,7 +237,9 @@ class SecureAPIClient:
 
             # Attempt to register device (or re-register if already done)
             registration_response = self.register_device()
-            logger.info(f"Device registration/update response: {registration_response}")
+            logger.info(
+                f"Device registration/update response: {registration_response}"
+            )
 
             # Test an endpoint that relies on registered device_id (e.g., get_device_info)
             # The server now relies on X-Device-Id header for initial simplified auth.
@@ -225,9 +247,13 @@ class SecureAPIClient:
                 device_info = self.get_device_info()
                 logger.info(f"Device info: {device_info}")
             except Exception as e:
-                logger.warning(f"Device info endpoint failed (this might be expected if server requires stronger auth post-registration): {e}")
+                logger.warning(
+                    f"Device info endpoint failed (this might be expected if server requires stronger auth post-registration): {e}"
+                )
 
-            logger.info("✅ Connection test and initial registration step completed!")
+            logger.info(
+                "✅ Connection test and initial registration step completed!"
+            )
             return True
 
         except Exception as e:
@@ -253,10 +279,13 @@ class DeviceAgent:
             return False
 
         # Send initial status after successful connection/registration
-        self.client.update_status("online", {
-            "startup_time": datetime.now(timezone.utc).isoformat(),
-            "version": "1.0" # You might want to get this from somewhere dynamically
-        })
+        self.client.update_status(
+            "online",
+            {
+                "startup_time": datetime.now(timezone.utc).isoformat(),
+                "version": "1.0",  # You might want to get this from somewhere dynamically
+            },
+        )
 
         return True
 
@@ -267,9 +296,10 @@ class DeviceAgent:
 
         # Send offline status
         try:
-            self.client.update_status("offline", {
-                "shutdown_time": datetime.now(timezone.utc).isoformat()
-            })
+            self.client.update_status(
+                "offline",
+                {"shutdown_time": datetime.now(timezone.utc).isoformat()},
+            )
         except Exception as e:
             logger.warning(f"Failed to send offline status: {e}")
 
@@ -306,16 +336,13 @@ class DeviceAgent:
                     "cpu_usage": self._get_cpu_usage(),
                     "memory_usage": self._get_memory_usage(),
                     "disk_usage": self._get_disk_usage(),
-                    "temperature": self._get_temperature()
+                    "temperature": self._get_temperature(),
                 },
                 "network": {
                     "ip_address": self._get_ip_address(),
-                    "connection_quality": "good"  # Simplified
+                    "connection_quality": "good",  # Simplified
                 },
-                "application": {
-                    "status": "running",
-                    "last_error": None
-                }
+                "application": {"status": "running", "last_error": None},
             }
 
             return telemetry
@@ -327,7 +354,7 @@ class DeviceAgent:
     def _get_uptime(self) -> float:
         """Get system uptime"""
         try:
-            with open('/proc/uptime', 'r') as f:
+            with open("/proc/uptime", "r") as f:
                 return float(f.readline().split()[0])
         except:
             return 0.0
@@ -336,6 +363,7 @@ class DeviceAgent:
         """Get CPU usage percentage"""
         try:
             import psutil
+
             return psutil.cpu_percent(interval=1)
         except:
             return 0.0
@@ -344,11 +372,12 @@ class DeviceAgent:
         """Get memory usage information"""
         try:
             import psutil
+
             mem = psutil.virtual_memory()
             return {
                 "total": mem.total,
                 "available": mem.available,
-                "percent": mem.percent
+                "percent": mem.percent,
             }
         except:
             return {"error": "psutil not available"}
@@ -357,12 +386,13 @@ class DeviceAgent:
         """Get disk usage information"""
         try:
             import psutil
-            disk = psutil.disk_usage('/')
+
+            disk = psutil.disk_usage("/")
             return {
                 "total": disk.total,
                 "used": disk.used,
                 "free": disk.free,
-                "percent": (disk.used / disk.total) * 100
+                "percent": (disk.used / disk.total) * 100,
             }
         except:
             return {"error": "psutil not available"}
@@ -370,7 +400,7 @@ class DeviceAgent:
     def _get_temperature(self) -> float:
         """Get CPU temperature (Raspberry Pi specific)"""
         try:
-            with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
+            with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
                 temp = float(f.read().strip()) / 1000.0
                 return temp
         except:
@@ -380,6 +410,7 @@ class DeviceAgent:
         """Get device IP address"""
         try:
             import socket
+
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
             ip = s.getsockname()[0]

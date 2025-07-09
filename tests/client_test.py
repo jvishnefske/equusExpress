@@ -5,7 +5,7 @@ import json
 from unittest.mock import patch, MagicMock, mock_open
 from datetime import datetime, timezone
 import time
-import requests # New import
+import requests  # New import
 
 # Import the classes to be tested
 from src.equus_express.client import SecureAPIClient, DeviceAgent
@@ -44,14 +44,18 @@ def mock_crypto():
         patch(
             "src.equus_express.client.serialization.PublicFormat.SubjectPublicKeyInfo"
         ) as mock_subject_public_key_info,
-        patch("src.equus_express.client.default_backend") as mock_default_backend,
+        patch(
+            "src.equus_express.client.default_backend"
+        ) as mock_default_backend,
     ):
 
         # Mock a private key object and its public_key method
         mock_private_key = MagicMock()
         mock_public_key = MagicMock()
         mock_private_key.public_key.return_value = mock_public_key
-        mock_public_key.public_bytes.return_value = MOCK_PUBLIC_KEY_PEM.encode("utf-8")
+        mock_public_key.public_bytes.return_value = MOCK_PUBLIC_KEY_PEM.encode(
+            "utf-8"
+        )
         mock_private_key.private_bytes.return_value = (
             b"-----BEGIN PRIVATE KEY-----MOCK-----END PRIVATE KEY-----"
         )
@@ -79,20 +83,29 @@ def mock_requests_session():
             "status": "success",
             "message": "Mocked response",
         }
-        mock_response.raise_for_status.return_value = None  # No HTTP errors by default
+        mock_response.raise_for_status.return_value = (
+            None  # No HTTP errors by default
+        )
         mock_session_instance.request.return_value = mock_response
         yield mock_session_instance
 
 
 @pytest.fixture
-def secure_client_no_keys_exist(tmp_key_dir, mock_crypto, mock_requests_session):
+def secure_client_no_keys_exist(
+    tmp_key_dir, mock_crypto, mock_requests_session
+):
     """SecureAPIClient instance where no keys exist initially."""
     with (
-        patch("src.equus_express.client.os.path.exists", side_effect=[False, False]),
+        patch(
+            "src.equus_express.client.os.path.exists",
+            side_effect=[False, False],
+        ),
         patch("src.equus_express.client.os.makedirs"),
     ):
         client = SecureAPIClient(
-            base_url=TEST_BASE_URL, device_id=TEST_DEVICE_ID, key_dir=tmp_key_dir
+            base_url=TEST_BASE_URL,
+            device_id=TEST_DEVICE_ID,
+            key_dir=tmp_key_dir,
         )
         yield client
 
@@ -110,7 +123,9 @@ def secure_client_keys_exist(tmp_key_dir, mock_crypto, mock_requests_session):
         "src.equus_express.client.os.path.exists", side_effect=[True, True]
     ):  # First call for private, second for public
         client = SecureAPIClient(
-            base_url=TEST_BASE_URL, device_id=TEST_DEVICE_ID, key_dir=tmp_key_dir
+            base_url=TEST_BASE_URL,
+            device_id=TEST_DEVICE_ID,
+            key_dir=tmp_key_dir,
         )
         yield client
 
@@ -122,7 +137,8 @@ def mock_device_agent_dependencies():
         patch("src.equus_express.client.SecureAPIClient") as MockClient,
         patch("src.equus_express.client.os.path.exists", return_value=True),
         patch(
-            "src.equus_express.client.socket.gethostname", return_value=TEST_DEVICE_ID
+            "src.equus_express.client.socket.gethostname",
+            return_value=TEST_DEVICE_ID,
         ),
         patch("src.equus_express.client.time.sleep") as mock_sleep,
         patch(
@@ -156,10 +172,12 @@ def mock_device_agent_dependencies():
         # Mock internal telemetry collection methods
         with (
             patch(
-                "src.equus_express.client.DeviceAgent._get_uptime", return_value=100.0
+                "src.equus_express.client.DeviceAgent._get_uptime",
+                return_value=100.0,
             ),
             patch(
-                "src.equus_express.client.DeviceAgent._get_cpu_usage", return_value=25.0
+                "src.equus_express.client.DeviceAgent._get_cpu_usage",
+                return_value=25.0,
             ),
             patch(
                 "src.equus_express.client.DeviceAgent._get_memory_usage",
@@ -224,7 +242,9 @@ def test_secure_client_make_request_success(
     client = secure_client_keys_exist
     result = client.get("/test")
 
-    mock_requests_session.request.assert_called_with("GET", f"{TEST_BASE_URL}/test")
+    mock_requests_session.request.assert_called_with(
+        "GET", f"{TEST_BASE_URL}/test"
+    )
     assert result == response_data
 
 
@@ -242,30 +262,43 @@ def test_secure_client_make_request_http_error(
         client.get("/nonexistent")
 
 
-def test_secure_client_register_device(mock_requests_session, secure_client_keys_exist):
+def test_secure_client_register_device(
+    mock_requests_session, secure_client_keys_exist
+):
     """Test register_device sends correct payload."""
     client = secure_client_keys_exist
     client.register_device()
     mock_requests_session.request.assert_called_with(
         "POST",
         f"{TEST_BASE_URL}/api/register",
-        json={"device_id": TEST_DEVICE_ID, "public_key": MOCK_PUBLIC_KEY_PEM.strip()},
+        json={
+            "device_id": TEST_DEVICE_ID,
+            "public_key": MOCK_PUBLIC_KEY_PEM.strip(),
+        },
     )
 
 
-def test_secure_client_health_check(mock_requests_session, secure_client_keys_exist):
+def test_secure_client_health_check(
+    mock_requests_session, secure_client_keys_exist
+):
     """Test health_check calls the correct endpoint."""
     client = secure_client_keys_exist
     client.health_check()
-    mock_requests_session.request.assert_called_with("GET", f"{TEST_BASE_URL}/health")
+    mock_requests_session.request.assert_called_with(
+        "GET", f"{TEST_BASE_URL}/health"
+    )
 
 
-def test_secure_client_send_telemetry(mock_requests_session, secure_client_keys_exist):
+def test_secure_client_send_telemetry(
+    mock_requests_session, secure_client_keys_exist
+):
     """Test send_telemetry sends correct payload."""
     client = secure_client_keys_exist
     test_data = {"temp": 25, "hum": 70}
     with patch("src.equus_express.client.datetime") as mock_dt:
-        mock_dt.now.return_value = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        mock_dt.now.return_value = datetime(
+            2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc
+        )
         mock_dt.timezone = timezone  # Attach timezone for `timezone.utc` access
         client.send_telemetry(test_data)
     mock_requests_session.request.assert_called_with(
@@ -290,13 +323,17 @@ def test_secure_client_get_configuration(
     )
 
 
-def test_secure_client_update_status(mock_requests_session, secure_client_keys_exist):
+def test_secure_client_update_status(
+    mock_requests_session, secure_client_keys_exist
+):
     """Test update_status sends correct payload."""
     client = secure_client_keys_exist
     test_status = "idle"
     test_details = {"battery": "90%"}
     with patch("src.equus_express.client.datetime") as mock_dt:
-        mock_dt.now.return_value = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        mock_dt.now.return_value = datetime(
+            2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc
+        )
         mock_dt.timezone = timezone  # Attach timezone for `timezone.utc` access
         client.update_status(test_status, test_details)
     mock_requests_session.request.assert_called_with(
@@ -347,7 +384,10 @@ def test_device_agent_start_success(mock_device_agent_dependencies):
     mock_client.test_connection.assert_called_once()
     mock_client.update_status.assert_called_with(
         "online",
-        {"startup_time": datetime.now(timezone.utc).isoformat(), "version": "1.0"},
+        {
+            "startup_time": datetime.now(timezone.utc).isoformat(),
+            "version": "1.0",
+        },
     )
     assert agent.running is True
 
@@ -415,7 +455,9 @@ def test_device_agent_collect_telemetry(mock_device_agent_dependencies):
     assert telemetry["network"]["ip_address"] == "192.168.1.100"
 
 
-def test_device_agent_collect_telemetry_error_handling(mock_device_agent_dependencies):
+def test_device_agent_collect_telemetry_error_handling(
+    mock_device_agent_dependencies,
+):
     """Test _collect_telemetry handles errors in helper methods."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
     agent = DeviceAgent(mock_client)
