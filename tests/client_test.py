@@ -180,7 +180,8 @@ def test_secure_client_register_device_network_error(mock_httpx_client, secure_c
         "Network unreachable", request=httpx.Request("POST", TEST_BASE_URL)
     )
 
-    with pytest.raises(httpx.RequestError, match="Network unreachable"):
+    # The SecureAPIClient.register_device wraps httpx.RequestError in a ConnectionError
+    with pytest.raises(ConnectionError, match="Request to server failed: Network unreachable"):
         client.register_device()
     mock_httpx_client.request.assert_called_once()
 
