@@ -55,7 +55,8 @@ class PublicKeyRegistration(BaseModel):
 # Database initialization
 def init_secure_db():
     """Initialize the secure database for device management"""
-    conn = sqlite3.connect('secure_devices.db')
+    db_file = os.getenv("SQLITE_DB_PATH", 'secure_devices.db')
+    conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
 
     # Devices table
@@ -205,7 +206,8 @@ def get_authenticated_device_id(request: Request, device_id: Optional[str] = Non
 def register_or_update_device(device_id: str, public_key: str, ip_address: str):
     """Register or update device in the database with its public key"""
     try:
-        conn = sqlite3.connect('secure_devices.db')
+        db_file = os.getenv("SQLITE_DB_PATH", 'secure_devices.db')
+        conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
 
         # Check if device exists
@@ -250,7 +252,7 @@ async def root(request: Request):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+    return {"status": "healthy", "timestamp": datetime.now(datetime.UTC).isoformat()}
 
 
 @app.get("/favicon.ico", include_in_schema=False)
