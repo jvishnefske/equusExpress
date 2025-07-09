@@ -579,6 +579,51 @@ def test_device_agent_run_telemetry_loop(mock_device_agent_dependencies):
     assert agent.running is True
 
 
+def test_device_agent_run_telemetry_loop_communication_error(mock_device_agent_dependencies):
+    """Test telemetry loop handles client communication errors."""
+    mock_client = mock_device_agent_dependencies["mock_client_instance"]
+    mock_sleep = mock_device_agent_dependencies["mock_sleep"]
+    agent = DeviceAgent(mock_client)
+
+    agent.running = True
+    mock_sleep.side_effect = [None, KeyboardInterrupt] # Two iterations
+    mock_client.send_telemetry.side_effect = [
+        httpx.ConnectError("Simulated connection error"),
+        None, # Second call succeeds
+    ]
+
+    with patch('equus_express.client.logger.error') as mock_error:
+        agent.run_telemetry_loop(interval=1)
+
+    mock_error.assert_called_once_with(
+        "Telemetry loop communication or data error: Simulated connection error"
+    )
+    assert mock_client.send_telemetry.call_count == 2 # First call fails, second succeeds
+    mock_sleep.assert_called_with(1) # Should sleep after error
+
+
+def test_device_agent_run_telemetry_loop_unexpected_error(mock_device_agent_dependencies):
+    """Test telemetry loop handles unexpected general errors."""
+    mock_client = mock_device_agent_dependencies["mock_client_instance"]
+    mock_sleep = mock_device_agent_dependencies["mock_sleep"]
+    agent = DeviceAgent(mock_client)
+
+    agent.running = True
+    mock_sleep.side_effect = [None, KeyboardInterrupt] # Two iterations
+    mock_client.send_telemetry.side_effect = [
+        ValueError("Unexpected data format"),
+        None, # Second call succeeds
+    ]
+
+    with patch('equus_express.client.logger.exception') as mock_exception_logger:
+        agent.run_telemetry_loop(interval=1)
+
+    mock_exception_logger.assert_called_once()
+    assert "An unexpected error occurred in telemetry loop: Unexpected data format" in mock_exception_logger.call_args[0][0]
+    assert mock_client.send_telemetry.call_count == 2
+    mock_sleep.assert_called_with(1)
+
+
 def test_device_agent_collect_telemetry(mock_device_agent_dependencies):
     """Test _collect_telemetry aggregates data from helper methods."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
