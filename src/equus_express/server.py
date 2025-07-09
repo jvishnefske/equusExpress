@@ -75,7 +75,7 @@ async def lifespan(app: FastAPI):
                 f"Mounted static files directly from package directory: {app.state.static_path}"
             )
         else:
-            # The resource is likely inside a zip file, so we need to extract its contents
+            # Uncovered: Static files from package need extraction (e.g., when zipped)
             logger.info(
                 f"Extracting static files from package to temporary directory: {temp_static_dir}"
             )
@@ -91,6 +91,7 @@ async def lifespan(app: FastAPI):
             logger.info(f"Static files extracted to {app.state.static_path}")
 
     except Exception as e:
+        # Uncovered: General exception during static file setup
         logger.error(f"Failed to set up static files during startup: {e}")
         # Re-raise the exception to prevent the application from starting without static files
         raise RuntimeError(f"Failed to initialize static file serving: {e}")
@@ -485,9 +486,11 @@ async def get_device_info(
                 "certificate_valid": True,
             }
         else:
+            # Uncovered: Device not found in get_device_info
             return {"error": "Device not found"}
 
     except Exception as e:
+        # Uncovered: Unexpected error in get_device_info
         logger.error(f"Failed to get device info: {e}")
         raise HTTPException(
             status_code=500, detail="Failed to retrieve device info"
@@ -543,6 +546,7 @@ async def receive_telemetry(
         return {"status": "success", "message": "Telemetry received"}
 
     except Exception as e:
+        # Uncovered: Unexpected error in receive_telemetry
         logger.error(f"Failed to store telemetry: {e}")
         raise HTTPException(
             status_code=500, detail="Failed to store telemetry"
@@ -607,6 +611,7 @@ async def update_device_status(
         return {"status": "success", "message": "Status updated"}
 
     except Exception as e:
+        # Uncovered: Unexpected error in update_device_status
         logger.error(f"Failed to update device status: {e}")
         raise HTTPException(status_code=500, detail="Failed to update status")
 
@@ -656,6 +661,7 @@ async def get_device_config(
             return {"device_id": device_id, "config": default_config}
 
     except Exception as e:
+        # Uncovered: Unexpected error in get_device_config
         logger.error(f"Failed to get device config: {e}")
         raise HTTPException(
             status_code=500, detail="Failed to retrieve configuration"
@@ -693,6 +699,7 @@ async def list_devices():
         }
 
     except Exception as e:
+        # Uncovered: Unexpected error in list_devices
         logger.error(f"Failed to list devices: {e}")
         raise HTTPException(status_code=500, detail="Failed to list devices")
 
@@ -729,6 +736,7 @@ async def get_device_telemetry(device_id: str, limit: int = 100):
         }
 
     except Exception as e:
+        # Uncovered: Unexpected error in get_device_telemetry
         logger.error(f"Failed to get telemetry: {e}")
         raise HTTPException(
             status_code=500, detail="Failed to retrieve telemetry"

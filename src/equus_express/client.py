@@ -523,58 +523,111 @@ class DeviceAgent:
             raise  # Re-raise for _collect_telemetry to catch and report
 
 
-def main():
-    """Main function for running the secure client"""
-    import sys
+import sys # Import sys for main function tests
 
-    if len(sys.argv) < 2:
-        print(
-            "Usage: python3 secure_client.py <secure_server_url> [device_id]"
-        )
-        print("Example: python3 secure_client.py https://secure-server:8443")
-        sys.exit(1)
+# ... (rest of the file content) ...
 
-    server_url = sys.argv[1]
-    device_id = sys.argv[2] if len(sys.argv) > 2 else None
+@pytest.fixture(autouse=True)
+def mock_sys_exit():
+    """Fixture to mock sys.exit to prevent actual program exit during tests."""
+    with patch('sys.exit') as mock_exit:
+        yield mock_exit
+
+
+def test_main_no_arguments(mock_sys_exit, capsys):
+    """Test main function exits with error if no arguments are provided."""
+    # Temporarily modify sys.argv for the test
+    original_argv = sys.argv
+    sys.argv = ["secure_client.py"]
 
     try:
-        # Create client
-        # The base_url should now be HTTP, as Traefik handles HTTPS.
-        # Example: http://secure-server:8000
-        client = SecureAPIClient(base_url=server_url, device_id=device_id)
+        from equus_express.client import main
+        main()
+    finally:
+        sys.argv = original_argv # Restore original argv
 
-        # Create device agent
-        agent = DeviceAgent(client)
+    mock_sys_exit.assert_called_once_with(1)
+    captured = capsys.readouterr()
+    assert "Usage: python3 secure_client.py <secure_server_url> [device_id]" in captured.out
 
-        # Start agent
-        if agent.start():
-            logger.info("Device agent started successfully")
 
-            # Run telemetry loop
+def test_main_agent_start_failure(mock_sys_exit, mock_device_agent_dependencies, caplog):
+    """Test main function exits if device agent fails to start."""
+    mock_client = mock_device_agent_dependencies["mock_client_instance"]
+    mock_client.test_connection.return_value = False # Force agent.start() to fail
+
+    original_argv = sys.argv
+    sys.argv = ["secure_client.py", TEST_BASE_URL, TEST_DEVICE_ID]
+
+    with caplog.at_level(logging.ERROR):
+        try:
+            from equus_express.client import main
+            main()
+        finally:
+            sys.argv = original_argv
+
+    mock_sys_exit.assert_called_once_with(1)
+    assert "Failed to start device agent" in caplog.text
+
+
+def test_main_client_init_critical_error(mock_sys_exit, mock_crypto, mock_httpx_client, tmp_key_dir, caplog):
+    """Test main function exits on critical client initialization error."""
+    mock_crypto["mock_os_makedirs"].side_effect = OSError("Critical init error") # Simulate error during key setup
+
+    original_argv = sys.argv
+    sys.argv = ["secure_client.py", TEST_BASE_URL, TEST_DEVICE_ID]
+
+    with caplog.at_level(logging.ERROR):
+        try:
+            from equus_express.client import main
+            main()
+        finally:
+            sys.argv = original_argv
+
+    mock_sys_exit.assert_called_once_with(1)
+    assert "A critical client error occurred: Failed to initialize client keys: Critical init error" in caplog.text
+
+
+def test_main_telemetry_loop_unhandled_exception(mock_sys_exit, mock_device_agent_dependencies, caplog):
+    """Test main function catches unhandled exceptions in telemetry loop and stops agent."""
+    mock_client = mock_device_agent_dependencies["mock_client_instance"]
+    mock_sleep = mock_device_agent_dependencies["mock_sleep"]
+    mock_sleep.side_effect = [
+        None, # First sleep for loop iteration
+        Exception("Simulated unhandled loop error"), # Second sleep to cause unhandled error
+    ]
+
+    original_argv = sys.argv
+    sys.argv = ["secure_client.py", TEST_BASE_URL, TEST_DEVICE_ID]
+
+    with caplog.at_level(logging.CRITICAL):
+        try:
+            from equus_express.client import main
+            main()
+        finally:
+            sys.argv = original_argv
+
+    mock_sys_exit.assert_called_once_with(1)
+    assert "Unhandled error in telemetry loop, agent stopping: Simulated unhandled loop error" in caplog.text
+    mock_client.update_status.assert_called_with("offline", {"shutdown_time": mock_device_agent_dependencies["fixed_now_iso"]})
+
+
+def test_main_unexpected_error(mock_sys_exit, caplog):
+    """Test main function handles unexpected general exceptions."""
+    original_argv = sys.argv
+    sys.argv = ["secure_client.py", TEST_BASE_URL, TEST_DEVICE_ID]
+
+    # Mock SecureAPIClient constructor to raise an unexpected error
+    with patch("equus_express.client.SecureAPIClient", side_effect=Exception("Unexpected client error")):
+        with caplog.at_level(logging.CRITICAL):
             try:
-                agent.run_telemetry_loop(interval=30)  # 30 second intervals
-            except KeyboardInterrupt:
-                logger.info("Telemetry loop stopped by user.")
-            except (
-                Exception
-            ) as e:  # Catch any unhandled errors in telemetry loop
-                logger.critical(
-                    f"Unhandled error in telemetry loop, agent stopping: {e}"
-                )
+                from equus_express.client import main
+                main()
             finally:
-                agent.stop()
-        else:
-            logger.error("Failed to start device agent")
-            sys.exit(1)
+                sys.argv = original_argv
 
-    except (RuntimeError, ConnectionError, PermissionError) as e:
-        logger.error(f"A critical client error occurred: {e}")
-        sys.exit(1)
-    except Exception as e:
-        logger.exception(
-            f"An unexpected error occurred in the main client process: {e}"
-        )  # Use exception for full traceback
-        sys.exit(1)
+    mock_sys_exit.assert_called_once_with(1)
+    assert "An unexpected error occurred in the main client process: Unexpected client error" in caplog.text
 
 
 if __name__ == "__main__":

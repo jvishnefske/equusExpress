@@ -298,6 +298,16 @@ def test_get_device_info():
     assert "status" in response.json()
 
 
+def test_get_device_info_not_found():
+    """Test getting device info for a device that does not exist."""
+    response = client.get(
+        "/api/device/info",
+        headers={"X-Device-Id": "non_existent_device"},
+    )
+    assert response.status_code == 200 # Current implementation returns 200 with error dict
+    assert response.json() == {"error": "Device not found"}
+
+
 def test_get_device_config():
     """Test getting device configuration."""
     # First, register the device
@@ -380,7 +390,19 @@ def test_register_device_db_error(mock_db_error):
         json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
     )
     assert response.status_code == 500
-    assert "Failed to register device" in response.json()["detail"]
+    assert "Database error during registration" in response.json()["detail"]
+
+
+def test_register_device_unexpected_error():
+    """Test device registration endpoint handles unexpected errors."""
+    # Mock register_or_update_device to raise a non-sqlite3 error
+    with patch('equus_express.server.register_or_update_device', side_effect=ValueError("Simulated unexpected error")):
+        response = client.post(
+            "/api/register",
+            json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+        )
+    assert response.status_code == 500
+    assert "Failed to register device: Simulated unexpected error" in response.json()["detail"]
 
 
 def test_get_device_info_db_error(mock_db_error):
@@ -408,6 +430,24 @@ def test_receive_telemetry_db_error(mock_db_error):
     assert "Failed to store telemetry" in response.json()["detail"]
 
 
+def test_receive_telemetry_unexpected_error():
+    """Test receive telemetry endpoint handles unexpected errors."""
+    # Mock sqlite3.connect within the endpoint to raise a non-sqlite3 error
+    with patch('equus_express.server.sqlite3.connect', side_effect=ValueError("Unexpected telemetry DB error")):
+        telemetry_data = {
+            "device_id": TEST_DEVICE_ID,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "data": {"temp": 25.5, "humidity": 60},
+        }
+        response = client.post(
+            "/api/telemetry",
+            json=telemetry_data,
+            headers={"X-Device-Id": TEST_DEVICE_ID},
+        )
+    assert response.status_code == 500
+    assert "Failed to store telemetry" in response.json()["detail"]
+
+
 def test_update_device_status_db_error(mock_db_error):
     """Test update device status endpoint handles database errors."""
     status_data = {
@@ -425,12 +465,41 @@ def test_update_device_status_db_error(mock_db_error):
     assert "Failed to update status" in response.json()["detail"]
 
 
+def test_update_device_status_unexpected_error():
+    """Test update device status endpoint handles unexpected errors."""
+    with patch('equus_express.server.sqlite3.connect', side_effect=ValueError("Unexpected status DB error")):
+        status_data = {
+            "device_id": TEST_DEVICE_ID,
+            "status": "active",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "details": {"battery": "80%"},
+        }
+        response = client.post(
+            "/api/device/status",
+            json=status_data,
+            headers={"X-Device-Id": TEST_DEVICE_ID},
+        )
+    assert response.status_code == 500
+    assert "Failed to update status" in response.json()["detail"]
+
+
 def test_get_device_config_db_error(mock_db_error):
     """Test get device config endpoint handles database errors."""
     response = client.get(
         f"/api/device/{TEST_DEVICE_ID}/config",
         headers={"X-Device-Id": TEST_DEVICE_ID},
     )
+    assert response.status_code == 500
+    assert "Failed to retrieve configuration" in response.json()["detail"]
+
+
+def test_get_device_config_unexpected_error():
+    """Test get device config endpoint handles unexpected errors."""
+    with patch('equus_express.server.sqlite3.connect', side_effect=ValueError("Unexpected config DB error")):
+        response = client.get(
+            f"/api/device/{TEST_DEVICE_ID}/config",
+            headers={"X-Device-Id": TEST_DEVICE_ID},
+        )
     assert response.status_code == 500
     assert "Failed to retrieve configuration" in response.json()["detail"]
 
@@ -442,11 +511,62 @@ def test_list_devices_db_error(mock_db_error):
     assert "Failed to list devices" in response.json()["detail"]
 
 
+def test_list_devices_unexpected_error():
+    """Test list devices endpoint handles unexpected errors."""
+    with patch('equus_express.server.sqlite3.connect', side_effect=ValueError("Unexpected list devices DB error")):
+        response = client.get("/api/admin/devices")
+    assert response.status_code == 500
+    assert "Failed to list devices" in response.json()["detail"]
+
+
 def test_get_device_telemetry_db_error(mock_db_error):
     """Test get device telemetry endpoint handles database errors."""
     response = client.get(f"/api/admin/telemetry/{TEST_DEVICE_ID}")
     assert response.status_code == 500
     assert "Failed to retrieve telemetry" in response.json()["detail"]
+
+
+def test_get_device_telemetry_unexpected_error():
+    """Test get device telemetry endpoint handles unexpected errors."""
+    with patch('equus_express.server.sqlite3.connect', side_effect=ValueError("Unexpected telemetry DB error")):
+        response = client.get(f"/api/admin/telemetry/{TEST_DEVICE_ID}")
+    assert response.status_code == 500
+    assert "Failed to retrieve telemetry" in response.json()["detail"]
+
+
+def test_lifespan_static_file_extraction_path():
+    """Test that lifespan extracts static files when pkg_resources.files does not return a direct path."""
+    temp_app = FastAPI(lifespan=lifespan)
+
+    # Mock is_dir() to return False, forcing extraction path
+    with patch('equus_express.server.pkg_resources.files') as mock_pkg_files:
+        mock_resource = MagicMock()
+        mock_resource.is_dir.return_value = False # Force extraction
+        mock_resource.iterdir.return_value = [MagicMock(name='app.js', spec=['name']), MagicMock(name='style.css', spec=['name'])] # Simulate files to copy
+        mock_pkg_files.return_value.joinpath.return_value = mock_resource
+
+        mock_as_file_context = MagicMock()
+        mock_as_file_context.__enter__.side_effect = [
+            tempfile.NamedTemporaryFile(delete=False),
+            tempfile.NamedTemporaryFile(delete=False)
+        ]
+        mock_pkg_files.as_file.return_value = mock_as_file_context
+
+        with patch('shutil.copy') as mock_shutil_copy:
+            with patch('tempfile.TemporaryDirectory') as mock_tempdir_class:
+                mock_tempdir_path = "/tmp/mock_static_dir"
+                mock_tempdir_class.return_value.__enter__.return_value = mock_tempdir_path
+                with TestClient(temp_app) as client:
+                    # Assert that static files were mounted from the temporary directory
+                    assert client.app.state.static_path == mock_tempdir_path
+                    # Assert shutil.copy was called for each simulated file
+                    assert mock_shutil_copy.call_count == 2
+                    mock_shutil_copy.assert_any_call(mock_as_file_context.__enter__.return_value.name, os.path.join(mock_tempdir_path, 'app.js'))
+                    mock_shutil_copy.assert_any_call(mock_as_file_context.__enter__.return_value.name, os.path.join(mock_tempdir_path, 'style.css'))
+
+        # Clean up temporary files created by mock_as_file_context
+        for tmp_file in mock_as_file_context.__enter__.side_effect:
+            os.unlink(tmp_file.name)
 
 
 def test_favicon_not_found():

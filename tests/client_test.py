@@ -138,12 +138,10 @@ def secure_client_keys_exist(tmp_key_dir, mock_crypto, mock_httpx_client):
     # Configure mock_os_path_exists to return True for both key files checks
     mock_crypto["mock_os_path_exists"].side_effect = [True, True]
 
-    # No need to physically create dummy files as 'open' is mocked.
-    # The 'mock_open' in 'mock_crypto' already provides read content for two reads.
     client = SecureAPIClient(
         base_url=TEST_BASE_URL,
         device_id=TEST_DEVICE_ID,
-        key_dir=tmp_key_dir,  # Ensure tmp_key_dir is passed
+        key_dir=tmp_key_dir,
     )
     yield client
     # Assert that os.makedirs was called for the key_dir (even if it exists)
@@ -159,6 +157,30 @@ def secure_client_keys_exist(tmp_key_dir, mock_crypto, mock_httpx_client):
     )
     # Verify load_pem_private_key was called, indicating successful key loading path
     mock_crypto["mock_serialization"].load_pem_private_key.assert_called_once()
+
+
+def test_secure_client_register_device_no_public_key(mock_httpx_client, tmp_key_dir):
+    """Test register_device raises RuntimeError if public_key_pem is not set."""
+    # Create a client that hasn't loaded/generated keys (e.g., mock _load_or_generate_keys to do nothing)
+    with patch("equus_express.client.SecureAPIClient._load_or_generate_keys"):
+        client = SecureAPIClient(base_url=TEST_BASE_URL, device_id=TEST_DEVICE_ID, key_dir=tmp_key_dir)
+        client.public_key_pem = None # Explicitly ensure public_key_pem is None
+
+        with pytest.raises(RuntimeError, match="Public key not available for registration."):
+            client.register_device()
+    mock_httpx_client.request.assert_not_called()
+
+
+def test_secure_client_register_device_network_error(mock_httpx_client, secure_client_keys_exist):
+    """Test register_device handles network/server errors."""
+    client = secure_client_keys_exist
+    mock_httpx_client.request.side_effect = httpx.RequestError(
+        "Network unreachable", request=httpx.Request("POST", TEST_BASE_URL)
+    )
+
+    with pytest.raises(httpx.RequestError, match="Network unreachable"):
+        client.register_device()
+    mock_httpx_client.request.assert_called_once()
 
 
 @pytest.fixture
@@ -456,17 +478,36 @@ def test_secure_client_test_connection_success(
 def test_secure_client_test_connection_failure(
     mock_httpx_client,
     secure_client_keys_exist,
-    mock_device_agent_dependencies,  # Added mock_device_agent_dependencies to ensure datetime is mocked
+    mock_device_agent_dependencies,
 ):
     """Test test_connection failure path."""
     client = secure_client_keys_exist
     # Make the mock raise a specific httpx error that test_connection catches
-    mock_httpx_client.request.return_value.json.side_effect = (
-        httpx.ConnectError(
-            "Connection failed", request=httpx.Request("GET", TEST_BASE_URL)
-        )
+    mock_httpx_client.request.side_effect = httpx.ConnectError(
+        "Connection failed", request=httpx.Request("GET", TEST_BASE_URL)
     )
     assert client.test_connection() is False
+
+
+def test_secure_client_test_connection_get_device_info_failure(
+    mock_httpx_client,
+    secure_client_keys_exist,
+    mock_device_agent_dependencies,
+):
+    """Test test_connection continues if get_device_info fails, but logs a warning."""
+    client = secure_client_keys_exist
+    # Mock health_check and register_device to succeed
+    mock_httpx_client.request.side_effect = [
+        MagicMock(status_code=200, json=lambda: {"status": "healthy"}), # for health_check
+        MagicMock(status_code=200, json=lambda: {"status": "success", "message": "registered"}), # for register_device
+        httpx.RequestError("Device info failed", request=httpx.Request("GET", TEST_BASE_URL)), # for get_device_info
+    ]
+
+    with patch('equus_express.client.logger.warning') as mock_warning:
+        assert client.test_connection() is True # Should still return True overall
+        mock_warning.assert_called_once_with(
+            f"Device info endpoint failed (this might be expected if server requires stronger auth post-registration): Device info failed"
+        )
 
 
 # --- DeviceAgent Tests ---
@@ -497,9 +538,23 @@ def test_device_agent_start_failure(mock_device_agent_dependencies):
     mock_client.test_connection.return_value = False
     agent = DeviceAgent(mock_client)
     assert agent.start() is False
-    assert (
-        agent.running is False
-    )  # This assertion was failing because agent.start() sets it to True initially. It should remain False if start() fails.
+    assert agent.running is False
+
+
+def test_device_agent_start_update_status_failure(mock_device_agent_dependencies):
+    """Test DeviceAgent handles failure to send initial 'online' status."""
+    mock_client = mock_device_agent_dependencies["mock_client_instance"]
+    mock_client.test_connection.return_value = True
+    mock_client.update_status.side_effect = httpx.RequestError(
+        "Status update failed", request=httpx.Request("POST", TEST_BASE_URL)
+    )
+    agent = DeviceAgent(mock_client)
+    with patch('equus_express.client.logger.warning') as mock_warning:
+        assert agent.start() is True # Still starts, but logs warning
+        mock_warning.assert_called_once_with(
+            "Failed to send initial 'online' status: Status update failed"
+        )
+    assert agent.running is True
 
 
 def test_device_agent_stop(mock_device_agent_dependencies):
@@ -715,6 +770,19 @@ def test_device_agent_collect_telemetry_ip_address_psutil_error(mock_device_agen
             telemetry = agent._collect_telemetry()
             assert "ip_address: Hostname error" in telemetry["application"]["last_error"]
             assert telemetry["network"]["ip_address"] == "error"
+
+
+def test_device_agent_collect_telemetry_ip_address_os_error(mock_device_agent_dependencies):
+    """Test _collect_telemetry handles OSError during IP address retrieval from hostname."""
+    mock_client = mock_device_agent_dependencies["mock_client_instance"]
+    agent = DeviceAgent(mock_client)
+    with patch(
+        "equus_express.client.socket.gethostbyname",
+        side_effect=OSError("OS error during hostname resolution"),
+    ):
+        telemetry = agent._collect_telemetry()
+        assert "ip_address: OS error during hostname resolution" in telemetry["application"]["last_error"]
+        assert telemetry["network"]["ip_address"] == "error"
 
 
 def test_device_agent_collect_telemetry_ip_address_socket_error(mock_device_agent_dependencies):
