@@ -36,10 +36,10 @@ app = FastAPI(title="Secure IoT API Server", lifespan=lifespan) # Updated FastAP
 security = HTTPBearer()
 
 # Initialize Jinja2Templates
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
 # Mount a static directory to serve files like favicon.ico
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
 
 
 # Data models
