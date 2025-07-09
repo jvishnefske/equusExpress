@@ -611,8 +611,15 @@ def test_device_agent_collect_telemetry_cpu_usage_not_implemented(mock_device_ag
     """Test _collect_telemetry handles CPU usage when psutil is not implemented."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
     agent = DeviceAgent(mock_client)
-    # Patch psutil to None specifically for this test
-    with patch("equus_express.client.psutil", new=None):
+    with (
+        patch("equus_express.client.psutil", new=None), # Patch psutil to None
+        # Mock other methods to ensure they don't produce errors in this specific test
+        patch("equus_express.client.DeviceAgent._get_uptime", return_value=100.0),
+        patch("equus_express.client.DeviceAgent._get_memory_usage", side_effect=PsutilNotInstalled("psutil library is not available.")),
+        patch("equus_express.client.DeviceAgent._get_disk_usage", side_effect=PsutilNotInstalled("psutil library is not available.")),
+        patch("equus_express.client.DeviceAgent._get_temperature", return_value=45.0),
+        patch("equus_express.client.DeviceAgent._get_ip_address", return_value=MOCK_IP_ADDRESS),
+    ):
         telemetry = agent._collect_telemetry()
         assert "cpu_usage: psutil library is not available." in telemetry["application"]["last_error"]
         assert telemetry["system"]["cpu_usage"] == "error"
@@ -635,8 +642,15 @@ def test_device_agent_collect_telemetry_memory_usage_not_implemented(mock_device
     """Test _collect_telemetry handles memory usage when psutil is not implemented."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
     agent = DeviceAgent(mock_client)
-    # Patch psutil to None specifically for this test
-    with patch("equus_express.client.psutil", new=None):
+    with (
+        patch("equus_express.client.psutil", new=None), # Patch psutil to None
+        # Mock other methods to ensure they don't produce errors in this specific test
+        patch("equus_express.client.DeviceAgent._get_uptime", return_value=100.0),
+        patch("equus_express.client.DeviceAgent._get_cpu_usage", side_effect=PsutilNotInstalled("psutil library is not available.")),
+        patch("equus_express.client.DeviceAgent._get_disk_usage", side_effect=PsutilNotInstalled("psutil library is not available.")),
+        patch("equus_express.client.DeviceAgent._get_temperature", return_value=45.0),
+        patch("equus_express.client.DeviceAgent._get_ip_address", return_value=MOCK_IP_ADDRESS),
+    ):
         telemetry = agent._collect_telemetry()
         assert "memory_usage: psutil library is not available." in telemetry["application"]["last_error"]
         assert "error" in telemetry["system"]["memory_usage"]
@@ -659,8 +673,15 @@ def test_device_agent_collect_telemetry_disk_usage_not_implemented(mock_device_a
     """Test _collect_telemetry handles disk usage when psutil is not implemented."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
     agent = DeviceAgent(mock_client)
-    # Patch psutil to None specifically for this test
-    with patch("equus_express.client.psutil", new=None):
+    with (
+        patch("equus_express.client.psutil", new=None), # Patch psutil to None
+        # Mock other methods to ensure they don't produce errors in this specific test
+        patch("equus_express.client.DeviceAgent._get_uptime", return_value=100.0),
+        patch("equus_express.client.DeviceAgent._get_cpu_usage", side_effect=PsutilNotInstalled("psutil library is not available.")),
+        patch("equus_express.client.DeviceAgent._get_memory_usage", side_effect=PsutilNotInstalled("psutil library is not available.")),
+        patch("equus_express.client.DeviceAgent._get_temperature", return_value=45.0),
+        patch("equus_express.client.DeviceAgent._get_ip_address", return_value=MOCK_IP_ADDRESS),
+    ):
         telemetry = agent._collect_telemetry()
         assert "disk_usage: psutil library is not available." in telemetry["application"]["last_error"]
         assert "error" in telemetry["system"]["disk_usage"]

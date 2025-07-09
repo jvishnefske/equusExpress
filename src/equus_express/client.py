@@ -31,8 +31,12 @@ except ImportError:
     logger.warning(
         "psutil not found. Some telemetry data might be unavailable."
     )
+
+
 class PsutilNotInstalled(NotImplementedError):
-    pass
+    # This class now takes a message, so it's consistent with other exceptions
+    def __init__(self, message="psutil library is not available."):
+        super().__init__(message)
 # Define default key storage directory
 DEFAULT_KEY_DIR = os.path.expanduser("~/.equus_express/keys")
 
@@ -446,7 +450,7 @@ class DeviceAgent:
                 raise  # Re-raise for _collect_telemetry to catch and report
         else:
             logger.debug("psutil not available for CPU usage.")
-            raise PsutilNotInstalled()
+            raise PsutilNotInstalled("psutil library is not available.")
 
     def _get_memory_usage(self) -> dict:
         """Get memory usage information"""
@@ -463,7 +467,7 @@ class DeviceAgent:
                 raise
         else:
             logger.debug("psutil not available for memory usage.")
-            raise PsutilNotInstalled()
+            raise PsutilNotInstalled("psutil library is not available.")
 
     def _get_disk_usage(self) -> dict:
         """Get disk usage information"""
@@ -481,7 +485,7 @@ class DeviceAgent:
                 raise
         else:
             logger.debug("psutil not available for disk usage.")
-            raise PsutilNotInstalled()
+            raise PsutilNotInstalled("psutil library is not available.")
 
     def _get_temperature(self) -> float:
         """Get CPU temperature (Raspberry Pi specific)"""

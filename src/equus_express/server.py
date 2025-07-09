@@ -559,7 +559,7 @@ async def update_device_status(
     )  # Use the ID from the payload after authentication check
 
     try:
-        db_file = dp_path
+        db_file = dp_path() # Corrected: Call dp_path function
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
 
