@@ -305,7 +305,9 @@ def get_authenticated_device_id(request: Request) -> str:
     )
 
 
-def register_or_update_device(device_id: str, public_key: str, ip_address: str):
+def register_or_update_device(
+    device_id: str, public_key: str, ip_address: str
+):
     """Register or update device in the database with its public key"""
     try:
         db_file = dp_path()
@@ -345,11 +347,15 @@ def register_or_update_device(device_id: str, public_key: str, ip_address: str):
         conn.close()
         logger.info(f"Device {device_id} registered/updated with public key.")
 
-    except sqlite3.Error as e: # Catch specific database errors
+    except sqlite3.Error as e:  # Catch specific database errors
         logger.error(f"Failed to register/update device {device_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Database error during registration: {e}")
-    except Exception as e: # Catch any other unexpected errors
-        logger.error(f"An unexpected error occurred during device registration for {device_id}: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Database error during registration: {e}"
+        )
+    except Exception as e:  # Catch any other unexpected errors
+        logger.error(
+            f"An unexpected error occurred during device registration for {device_id}: {e}"
+        )
 
 
 @app.get("/")
@@ -538,7 +544,9 @@ async def receive_telemetry(
 
     except Exception as e:
         logger.error(f"Failed to store telemetry: {e}")
-        raise HTTPException(status_code=500, detail="Failed to store telemetry")
+        raise HTTPException(
+            status_code=500, detail="Failed to store telemetry"
+        )
 
 
 @app.post("/api/device/status")
@@ -559,7 +567,7 @@ async def update_device_status(
     )  # Use the ID from the payload after authentication check
 
     try:
-        db_file = dp_path() # Corrected: Call dp_path function
+        db_file = dp_path()  # Corrected: Call dp_path function
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
 

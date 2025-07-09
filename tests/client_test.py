@@ -3,7 +3,7 @@ from unittest.mock import patch, MagicMock, mock_open
 from datetime import datetime, timezone
 import httpx
 # Import the classes to be tested
-from equus_express.client import SecureAPIClient, DeviceAgent
+from equus_express.client import SecureAPIClient, DeviceAgent, PsutilNotInstalled # Added PsutilNotInstalled
 import os
 import socket
 # Removed psutil import as it's not required for unit tests;

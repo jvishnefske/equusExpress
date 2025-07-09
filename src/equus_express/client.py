@@ -37,6 +37,8 @@ class PsutilNotInstalled(NotImplementedError):
     # This class now takes a message, so it's consistent with other exceptions
     def __init__(self, message="psutil library is not available."):
         super().__init__(message)
+
+
 # Define default key storage directory
 DEFAULT_KEY_DIR = os.path.expanduser("~/.equus_express/keys")
 
@@ -365,7 +367,9 @@ class DeviceAgent:
                 TypeError,
             ) as e:
                 # Catch specific client communication errors or data formatting issues
-                logger.error(f"Telemetry loop communication or data error: {e}")
+                logger.error(
+                    f"Telemetry loop communication or data error: {e}"
+                )
                 time.sleep(interval)  # Wait before retrying
             except (
                 Exception
@@ -450,7 +454,7 @@ class DeviceAgent:
                 raise  # Re-raise for _collect_telemetry to catch and report
         else:
             logger.debug("psutil not available for CPU usage.")
-            raise PsutilNotInstalled("psutil library is not available.")
+            raise PsutilNotInstalled()
 
     def _get_memory_usage(self) -> dict:
         """Get memory usage information"""
@@ -467,7 +471,7 @@ class DeviceAgent:
                 raise
         else:
             logger.debug("psutil not available for memory usage.")
-            raise PsutilNotInstalled("psutil library is not available.")
+            raise PsutilNotInstalled()
 
     def _get_disk_usage(self) -> dict:
         """Get disk usage information"""
@@ -485,7 +489,7 @@ class DeviceAgent:
                 raise
         else:
             logger.debug("psutil not available for disk usage.")
-            raise PsutilNotInstalled("psutil library is not available.")
+            raise PsutilNotInstalled()
 
     def _get_temperature(self) -> float:
         """Get CPU temperature (Raspberry Pi specific)"""
@@ -524,7 +528,9 @@ def main():
     import sys
 
     if len(sys.argv) < 2:
-        print("Usage: python3 secure_client.py <secure_server_url> [device_id]")
+        print(
+            "Usage: python3 secure_client.py <secure_server_url> [device_id]"
+        )
         print("Example: python3 secure_client.py https://secure-server:8443")
         sys.exit(1)
 
