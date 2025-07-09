@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.security import HTTPBearer
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates # New import
 import uvicorn
 import ssl
 import os
@@ -21,6 +22,9 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Secure IoT API Server")
 security = HTTPBearer()
+
+# Initialize Jinja2Templates
+templates = Jinja2Templates(directory="templates") # New line
 
 # Mount a static directory to serve files like favicon.ico
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -239,8 +243,8 @@ async def startup_event():
 
 
 @app.get("/")
-async def root():
-    return {"message": "Secure IoT API Server", "version": "1.0"}
+async def root(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
 
 @app.get("/health")
@@ -249,7 +253,6 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
 
-@app.get("/dashboard", response_class=HTMLResponse)
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     return FileResponse("static/favicon.ico")
