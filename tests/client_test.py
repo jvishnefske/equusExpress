@@ -30,22 +30,22 @@ def mock_crypto():
     """Fixture to mock cryptography functions for key generation/loading."""
     with (
         patch(
-            "src.equus_express.client.rsa.generate_private_key"
+            "equus_express.client.rsa.generate_private_key" # Removed src.
         ) as mock_generate_private_key,
         patch(
-            "src.equus_express.client.serialization.load_pem_private_key"
+            "equus_express.client.serialization.load_pem_private_key" # Removed src.
         ) as mock_load_pem_private_key,
         patch(
-            "src.equus_express.client.serialization.NoEncryption"
+            "equus_express.client.serialization.NoEncryption" # Removed src.
         ) as mock_no_encryption,
         patch(
-            "src.equus_express.client.serialization.PrivateFormat.PKCS8"
+            "equus_express.client.serialization.PrivateFormat.PKCS8" # Removed src.
         ) as mock_pkcs8,
         patch(
-            "src.equus_express.client.serialization.PublicFormat.SubjectPublicKeyInfo"
+            "equus_express.client.serialization.PublicFormat.SubjectPublicKeyInfo" # Removed src.
         ) as mock_subject_public_key_info,
         patch(
-            "src.equus_express.client.default_backend"
+            "equus_express.client.default_backend" # Removed src.
         ) as mock_default_backend,
     ):
 
@@ -72,9 +72,9 @@ def mock_crypto():
 
 
 @pytest.fixture
-def mock_httpx_client(): # Renamed fixture
+def mock_httpx_client():
     """Fixture to mock httpx.Client."""
-    with patch("src.equus_express.client.httpx.Client") as MockClient: # Changed to httpx.Client
+    with patch("equus_express.client.httpx.Client") as MockClient: # Removed src.
         mock_client_instance = MockClient.return_value
         # Default mock response for success
         mock_response = MagicMock()
@@ -134,31 +134,31 @@ def secure_client_keys_exist(tmp_key_dir, mock_crypto, mock_httpx_client): # Cha
 def mock_device_agent_dependencies():
     """Mocks system calls for DeviceAgent's telemetry collection."""
     with (
-        patch("src.equus_express.client.SecureAPIClient") as MockClient,
-        patch("src.equus_express.client.os.path.exists", return_value=True),
+        patch("equus_express.client.SecureAPIClient") as MockClient, # Removed src.
+        patch("equus_express.client.os.path.exists", return_value=True), # Removed src.
         patch(
-            "src.equus_express.client.socket.gethostname",
+            "equus_express.client.socket.gethostname", # Removed src.
             return_value=TEST_DEVICE_ID,
         ),
-        patch("src.equus_express.client.time.sleep") as mock_sleep,
+        patch("equus_express.client.time.sleep") as mock_sleep, # Removed src.
         patch(
-            "src.equus_express.client.SecureAPIClient.send_telemetry",
+            "equus_express.client.SecureAPIClient.send_telemetry", # Removed src.
             return_value={"status": "success"},
         ),
         patch(
-            "src.equus_express.client.SecureAPIClient.update_status",
+            "equus_express.client.SecureAPIClient.update_status", # Removed src.
             return_value={"status": "success"},
         ),
         patch(
-            "src.equus_express.client.SecureAPIClient.test_connection",
+            "equus_express.client.SecureAPIClient.test_connection", # Removed src.
             return_value=True,
         ),
         patch(
-            "src.equus_express.client.SecureAPIClient.get_device_info",
+            "equus_express.client.SecureAPIClient.get_device_info", # Removed src.
             return_value={"device_id": TEST_DEVICE_ID},
         ),
         patch(
-            "src.equus_express.client.SecureAPIClient.register_device",
+            "equus_express.client.SecureAPIClient.register_device", # Removed src.
             return_value={"status": "success"},
         ),
     ):
@@ -172,27 +172,27 @@ def mock_device_agent_dependencies():
         # Mock internal telemetry collection methods
         with (
             patch(
-                "src.equus_express.client.DeviceAgent._get_uptime",
+                "equus_express.client.DeviceAgent._get_uptime", # Removed src.
                 return_value=100.0,
             ),
             patch(
-                "src.equus_express.client.DeviceAgent._get_cpu_usage",
+                "equus_express.client.DeviceAgent._get_cpu_usage", # Removed src.
                 return_value=25.0,
             ),
             patch(
-                "src.equus_express.client.DeviceAgent._get_memory_usage",
+                "equus_express.client.DeviceAgent._get_memory_usage", # Removed src.
                 return_value={"total": 1000, "percent": 50},
             ),
             patch(
-                "src.equus_express.client.DeviceAgent._get_disk_usage",
+                "equus_express.client.DeviceAgent._get_disk_usage", # Removed src.
                 return_value={"total": 1000, "percent": 70},
             ),
             patch(
-                "src.equus_express.client.DeviceAgent._get_temperature",
+                "equus_express.client.DeviceAgent._get_temperature", # Removed src.
                 return_value=45.0,
             ),
             patch(
-                "src.equus_express.client.DeviceAgent._get_ip_address",
+                "equus_express.client.DeviceAgent._get_ip_address", # Removed src.
                 return_value="192.168.1.100",
             ),
         ):
