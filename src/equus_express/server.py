@@ -380,101 +380,14 @@ async def dashboard():
     <html>
     <head>
         <title>Equus Express Dashboard</title>
-        <style>
-            body { font-family: sans-serif; margin: 20px; line-height: 1.6; }
-            .container { max-width: 1200px; margin: auto; padding: 0 15px; }
-            h1 { text-align: center; color: #333; }
-            .device-card {
-                border: 1px solid #ddd;
-                padding: 20px;
-                margin-bottom: 15px;
-                border-radius: 8px;
-                background-color: #f9f9f9;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            }
-            .device-card h2 { color: #0056b3; margin-top: 0; }
-            .device-card p { margin: 5px 0; }
-            pre {
-                background-color: #eee;
-                padding: 15px;
-                border-radius: 5px;
-                overflow-x: auto;
-                font-family: 'Courier New', monospace;
-                white-space: pre-wrap; /* Ensures long lines wrap */
-                word-wrap: break-word; /* Ensures long words break */
-            }
-            .no-devices { text-align: center; color: #666; padding: 20px; }
-            .error-message { color: red; text-align: center; padding: 20px; }
-        </style>
+        <link rel="stylesheet" href="/static/style.css">
     </head>
     <body>
         <div class="container">
             <h1>Equus Express Device Dashboard</h1>
             <div id="devices-container">Loading devices...</div>
         </div>
-
-        <script>
-            async function fetchDevices() {
-                try {
-                    const response = await fetch('/api/admin/devices');
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    const data = await response.json();
-                    const container = document.getElementById('devices-container');
-                    container.innerHTML = ''; // Clear loading message
-
-                    if (data.devices && data.devices.length > 0) {
-                        for (const device of data.devices) {
-                            const deviceCard = document.createElement('div');
-                            deviceCard.className = 'device-card';
-                            deviceCard.innerHTML = `
-                                <h2>Device ID: ${device.device_id}</h2>
-                                <p><strong>Status:</strong> ${device.status}</p>
-                                <p><strong>Last Seen:</strong> ${new Date(device.last_seen).toLocaleString()}</p>
-                                <p><strong>IP Address:</strong> ${device.ip_address}</p>
-                                <h3>Latest Telemetry:</h3>
-                                <div id="telemetry-${device.device_id}">Loading telemetry...</div>
-                            `;
-                            container.appendChild(deviceCard);
-                            fetchTelemetry(device.device_id);
-                        }
-                    } else {
-                        container.innerHTML = '<p class="no-devices">No devices registered yet.</p>';
-                    }
-                } catch (error) {
-                    console.error('Error fetching devices:', error);
-                    document.getElementById('devices-container').innerHTML = '<p class="error-message">Error loading devices. Please check server logs.</p>';
-                }
-            }
-
-            async function fetchTelemetry(deviceId) {
-                try {
-                    const response = await fetch(`/api/admin/telemetry/${deviceId}?limit=1`);
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    const data = await response.json();
-                    const telemetryContainer = document.getElementById(`telemetry-${deviceId}`);
-                    if (data.telemetry && data.telemetry.length > 0) {
-                        const latestTelemetry = data.telemetry[0];
-                        telemetryContainer.innerHTML = `
-                            <p>Timestamp: ${new Date(latestTelemetry.timestamp).toLocaleString()}</p>
-                            <pre>${JSON.stringify(latestTelemetry.data, null, 2)}</pre>
-                        `;
-                    } else {
-                        telemetryContainer.innerHTML = '<p>No telemetry data available.</p>';
-                    }
-                } catch (error) {
-                    console.error(`Error fetching telemetry for ${deviceId}:`, error);
-                    document.getElementById(`telemetry-${deviceId}`).innerHTML = '<p style="color: red;">Error loading telemetry.</p>';
-                }
-            }
-
-            // Fetch data initially and then every 10 seconds
-            fetchDevices();
-            setInterval(fetchDevices, 10000); // Refresh every 10 seconds
-        </script>
+        <script src="/static/app.js"></script>
     </body>
     </html>
     """

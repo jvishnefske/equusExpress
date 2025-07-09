@@ -21,7 +21,9 @@ def setup_teardown_db():
     """
     # Define a temporary database file for testing
     test_db_path = "test_secure_devices.db"
-    os.environ["SQLITE_DB_PATH"] = test_db_path # Use an env var if server used it, or pass directly
+    os.environ["SQLITE_DB_PATH"] = (
+        test_db_path  # Use an env var if server used it, or pass directly
+    )
 
     # Ensure the app uses the test database path during startup for the fixture scope
     # This might require modifying app initialization if not already flexible.
@@ -71,7 +73,10 @@ def test_register_device():
     # Verify device in DB
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT device_id, public_key FROM devices WHERE device_id = ?", (TEST_DEVICE_ID,))
+    cursor.execute(
+        "SELECT device_id, public_key FROM devices WHERE device_id = ?",
+        (TEST_DEVICE_ID,),
+    )
     device = cursor.fetchone()
     conn.close()
 
@@ -83,7 +88,10 @@ def test_register_device():
 def test_send_telemetry():
     """Test sending telemetry data."""
     # First, register the device
-    client.post("/api/register", json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY})
+    client.post(
+        "/api/register",
+        json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+    )
 
     telemetry_data = {
         "device_id": TEST_DEVICE_ID,
@@ -93,7 +101,9 @@ def test_send_telemetry():
     response = client.post(
         "/api/telemetry",
         json=telemetry_data,
-        headers={"X-Device-Id": TEST_DEVICE_ID} # Pass device_id in header for authentication
+        headers={
+            "X-Device-Id": TEST_DEVICE_ID
+        },  # Pass device_id in header for authentication
     )
     assert response.status_code == 200
     assert response.json()["status"] == "success"
@@ -101,30 +111,38 @@ def test_send_telemetry():
     # Verify telemetry in DB
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT device_id, data FROM telemetry WHERE device_id = ?", (TEST_DEVICE_ID,))
+    cursor.execute(
+        "SELECT device_id, data FROM telemetry WHERE device_id = ?",
+        (TEST_DEVICE_ID,),
+    )
     telemetry_record = cursor.fetchone()
     conn.close()
 
     assert telemetry_record is not None
     assert telemetry_record[0] == TEST_DEVICE_ID
-    assert "temp" in telemetry_record[1] # Check if data is stored as JSON string
+    assert (
+        "temp" in telemetry_record[1]
+    )  # Check if data is stored as JSON string
 
 
 def test_update_device_status():
     """Test updating device status."""
     # First, register the device
-    client.post("/api/register", json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY})
+    client.post(
+        "/api/register",
+        json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+    )
 
     status_data = {
         "device_id": TEST_DEVICE_ID,
         "status": "active",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "details": {"battery": "80%"}
+        "details": {"battery": "80%"},
     }
     response = client.post(
         "/api/device/status",
         json=status_data,
-        headers={"X-Device-Id": TEST_DEVICE_ID}
+        headers={"X-Device-Id": TEST_DEVICE_ID},
     )
     assert response.status_code == 200
     assert response.json()["status"] == "success"
@@ -132,7 +150,9 @@ def test_update_device_status():
     # Verify status in DB
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT status FROM devices WHERE device_id = ?", (TEST_DEVICE_ID,))
+    cursor.execute(
+        "SELECT status FROM devices WHERE device_id = ?", (TEST_DEVICE_ID,)
+    )
     device_status = cursor.fetchone()
     conn.close()
 
@@ -143,11 +163,16 @@ def test_update_device_status():
 def test_get_device_info():
     """Test getting device information."""
     # First, register the device
-    client.post("/api/register", json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY})
+    client.post(
+        "/api/register",
+        json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+    )
 
     response = client.get(
         "/api/device/info",
-        headers={"X-Device-Id": TEST_DEVICE_ID} # Pass device_id in header for authentication
+        headers={
+            "X-Device-Id": TEST_DEVICE_ID
+        },  # Pass device_id in header for authentication
     )
     assert response.status_code == 200
     assert response.json()["device_id"] == TEST_DEVICE_ID
@@ -157,39 +182,56 @@ def test_get_device_info():
 def test_get_device_config():
     """Test getting device configuration."""
     # First, register the device
-    client.post("/api/register", json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY})
+    client.post(
+        "/api/register",
+        json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+    )
 
     response = client.get(
         f"/api/device/{TEST_DEVICE_ID}/config",
-        headers={"X-Device-Id": TEST_DEVICE_ID}
+        headers={"X-Device-Id": TEST_DEVICE_ID},
     )
     assert response.status_code == 200
     assert response.json()["device_id"] == TEST_DEVICE_ID
     assert "config" in response.json()
-    assert response.json()["config"]["telemetry_interval"] == 60 # Default config
+    assert (
+        response.json()["config"]["telemetry_interval"] == 60
+    )  # Default config
 
 
 def test_list_devices():
     """Test listing all devices (admin endpoint)."""
     # Register a device first
-    client.post("/api/register", json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY})
+    client.post(
+        "/api/register",
+        json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+    )
 
     response = client.get("/api/admin/devices")
     assert response.status_code == 200
     assert isinstance(response.json()["devices"], list)
-    assert any(d["device_id"] == TEST_DEVICE_ID for d in response.json()["devices"])
+    assert any(
+        d["device_id"] == TEST_DEVICE_ID for d in response.json()["devices"]
+    )
 
 
 def test_get_device_telemetry():
     """Test getting telemetry for a specific device (admin endpoint)."""
     # Register device and send telemetry
-    client.post("/api/register", json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY})
+    client.post(
+        "/api/register",
+        json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+    )
     telemetry_data = {
         "device_id": TEST_DEVICE_ID,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "data": {"temp": 25.5, "humidity": 60},
     }
-    client.post("/api/telemetry", json=telemetry_data, headers={"X-Device-Id": TEST_DEVICE_ID})
+    client.post(
+        "/api/telemetry",
+        json=telemetry_data,
+        headers={"X-Device-Id": TEST_DEVICE_ID},
+    )
 
     response = client.get(f"/api/admin/telemetry/{TEST_DEVICE_ID}")
     assert response.status_code == 200
