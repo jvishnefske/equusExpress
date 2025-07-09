@@ -368,7 +368,7 @@ def test_get_device_telemetry():
     assert isinstance(response.json()["telemetry"], list)
     assert len(response.json()["telemetry"]) > 0
     assert "data" in response.json()["telemetry"][0]
-    assert response.json()["telemetry"][0]["data"]["temp"] == 25.5
+    assert response.json()["telemetry"][0]["data"]["temp"] == pytest.approx(25.5)
 
 
 def test_init_secure_db_error(mock_db_error):
