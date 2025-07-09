@@ -45,6 +45,15 @@ def setup_teardown_db():
         del os.environ["SQLITE_DB_PATH"]
 
 
+# Fixture to mock sqlite3.connect for error scenarios
+@pytest.fixture
+def mock_db_error():
+    """Fixture to mock sqlite3.connect to raise an error."""
+    with patch("equus_express.server.sqlite3.connect") as mock_connect:
+        mock_connect.side_effect = sqlite3.Error("Mock DB Error")
+        yield mock_connect
+
+
 def get_db_connection():
     """Helper to get a database connection for assertions."""
     # Ensure this connects to the same test DB as the server
@@ -348,3 +357,117 @@ def test_get_device_telemetry():
     assert len(response.json()["telemetry"]) > 0
     assert "data" in response.json()["telemetry"][0]
     assert response.json()["telemetry"][0]["data"]["temp"] == 25.5
+
+
+def test_init_secure_db_error(mock_db_error):
+    """Test init_secure_db handles database errors."""
+    # Ensure a clean slate before attempting to init with error
+    test_db_path = os.getenv("SQLITE_DB_PATH", "test_secure_devices.db")
+    if os.path.exists(test_db_path):
+        os.remove(test_db_path)
+
+    with pytest.raises(sqlite3.Error, match="Mock DB Error"):
+        init_secure_db()
+    mock_db_error.assert_called_once() # Verify connect was attempted
+
+
+def test_register_device_db_error(mock_db_error):
+    """Test device registration endpoint handles database errors."""
+    response = client.post(
+        "/api/register",
+        json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+    )
+    assert response.status_code == 500
+    assert "Failed to register device" in response.json()["detail"]
+
+
+def test_get_device_info_db_error(mock_db_error):
+    """Test get device info endpoint handles database errors."""
+    response = client.get(
+        "/api/device/info", headers={"X-Device-Id": TEST_DEVICE_ID}
+    )
+    assert response.status_code == 500
+    assert "Failed to retrieve device info" in response.json()["detail"]
+
+
+def test_receive_telemetry_db_error(mock_db_error):
+    """Test receive telemetry endpoint handles database errors."""
+    telemetry_data = {
+        "device_id": TEST_DEVICE_ID,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "data": {"temp": 25.5, "humidity": 60},
+    }
+    response = client.post(
+        "/api/telemetry",
+        json=telemetry_data,
+        headers={"X-Device-Id": TEST_DEVICE_ID},
+    )
+    assert response.status_code == 500
+    assert "Failed to store telemetry" in response.json()["detail"]
+
+
+def test_update_device_status_db_error(mock_db_error):
+    """Test update device status endpoint handles database errors."""
+    status_data = {
+        "device_id": TEST_DEVICE_ID,
+        "status": "active",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "details": {"battery": "80%"},
+    }
+    response = client.post(
+        "/api/device/status",
+        json=status_data,
+        headers={"X-Device-Id": TEST_DEVICE_ID},
+    )
+    assert response.status_code == 500
+    assert "Failed to update status" in response.json()["detail"]
+
+
+def test_get_device_config_db_error(mock_db_error):
+    """Test get device config endpoint handles database errors."""
+    response = client.get(
+        f"/api/device/{TEST_DEVICE_ID}/config",
+        headers={"X-Device-Id": TEST_DEVICE_ID},
+    )
+    assert response.status_code == 500
+    assert "Failed to retrieve configuration" in response.json()["detail"]
+
+
+def test_list_devices_db_error(mock_db_error):
+    """Test list devices endpoint handles database errors."""
+    response = client.get("/api/admin/devices")
+    assert response.status_code == 500
+    assert "Failed to list devices" in response.json()["detail"]
+
+
+def test_get_device_telemetry_db_error(mock_db_error):
+    """Test get device telemetry endpoint handles database errors."""
+    response = client.get(f"/api/admin/telemetry/{TEST_DEVICE_ID}")
+    assert response.status_code == 500
+    assert "Failed to retrieve telemetry" in response.json()["detail"]
+
+
+def test_favicon_not_found():
+    """Test favicon endpoint when file is not found."""
+    with patch("equus_express.server.pkg_resources.files") as mock_files:
+        mock_files.return_value.joinpath.return_value.is_dir.return_value = False
+        mock_files.return_value.joinpath.return_value.__enter__.side_effect = FileNotFoundError("Favicon missing")
+        response = client.get("/favicon.ico")
+        assert response.status_code == 404
+        assert "Favicon not found" in response.json()["detail"]
+
+
+def test_lifespan_static_file_setup_error():
+    """Test lifespan context manager handles errors during static file setup."""
+    # Temporarily remove the existing app lifespan and create a new one to test error scenario
+    original_lifespan = app.router.lifespan_context
+    del app.router.lifespan_context
+
+    # Mock tempfile.TemporaryDirectory to raise an error
+    with patch("equus_express.server.tempfile.TemporaryDirectory", side_effect=OSError("Temp dir error")) as mock_tempdir:
+        with pytest.raises(RuntimeError, match="Failed to initialize static file serving"):
+            with app.router.lifespan_context(app):
+                pass # The context manager will try to set up static files here
+
+    # Restore original lifespan to avoid interfering with other tests
+    app.router.lifespan_context = original_lifespan

@@ -234,16 +234,18 @@ def mock_device_agent_dependencies():
             ),
             patch(
                 "equus_express.client.DeviceAgent._get_ip_address",
-                return_value=MOCK_IP_ADDRESS, # Use the constant here
+                return_value=MOCK_IP_ADDRESS,
             ),
         ):
-
-            yield {
-                "MockClient": MockClient,
-                "mock_client_instance": mock_client_instance,
-                "mock_sleep": mock_sleep,
-                "fixed_now_iso": fixed_now.isoformat(),  # Provide the fixed isoformat string for assertions
-            }
+            # Patch psutil module directly for testing its absence
+            with patch("equus_express.client.psutil", new=None) as mock_psutil_none:
+                yield {
+                    "MockClient": MockClient,
+                    "mock_client_instance": mock_client_instance,
+                    "mock_sleep": mock_sleep,
+                    "fixed_now_iso": fixed_now.isoformat(),
+                    "mock_psutil_none": mock_psutil_none, # For testing psutil = None paths
+                }
 
 
 # --- SecureAPIClient Tests ---
@@ -274,28 +276,85 @@ def test_secure_client_initialization_loads_keys(
     mock_crypto["mock_generate_private_key"].assert_not_called()
     mock_crypto[
         "mock_serialization"
-    ].load_pem_private_key.assert_called_once()  # Updated mock assertion
+    ].load_pem_private_key.assert_called_once()
+
+
+def test_secure_client_init_os_error(tmp_key_dir, mock_crypto, mock_httpx_client):
+    """Test that SecureAPIClient initialization handles OSError during key operations."""
+    # Simulate an OSError during os.makedirs
+    mock_crypto["mock_os_makedirs"].side_effect = OSError("Disk full")
+
+    with pytest.raises(RuntimeError, match="Failed to initialize client keys"):
+        SecureAPIClient(
+            base_url=TEST_BASE_URL,
+            device_id=TEST_DEVICE_ID,
+            key_dir=tmp_key_dir,
+        )
+    mock_crypto["mock_os_makedirs"].assert_called_once_with(tmp_key_dir, exist_ok=True)
 
 
 def test_secure_client_make_request_success(
-    mock_httpx_client, secure_client_keys_exist  # Changed fixture name
+    mock_httpx_client, secure_client_keys_exist
 ):
     """Test _make_request for a successful response."""
     response_data = {"key": "value"}
-    mock_httpx_client.request.return_value.json.return_value = (
-        response_data  # Changed mock_requests_session to mock_httpx_client
-    )
-    mock_httpx_client.request.return_value.status_code = (
-        200  # Changed mock_requests_session to mock_httpx_client
-    )
+    mock_httpx_client.request.return_value.json.return_value = response_data
+    mock_httpx_client.request.return_value.status_code = 200
 
     client = secure_client_keys_exist
     result = client.get("/test")
 
-    mock_httpx_client.request.assert_called_with(  # Changed mock_requests_session to mock_httpx_client
+    mock_httpx_client.request.assert_called_with(
         "GET", f"{TEST_BASE_URL}/test"
     )
     assert result == response_data
+
+
+def test_secure_client_make_request_non_json_response(
+    mock_httpx_client, secure_client_keys_exist
+):
+    """Test _make_request handles non-JSON successful responses."""
+    mock_httpx_client.request.return_value.status_code = 200
+    mock_httpx_client.request.return_value.json.side_effect = httpx.ReadError("Invalid JSON")
+    mock_httpx_client.request.return_value.text = "OK"
+
+    client = secure_client_keys_exist
+    result = client.get("/plaintext")
+
+    assert result == "OK"
+    mock_httpx_client.request.assert_called_once_with("GET", f"{TEST_BASE_URL}/plaintext")
+
+
+def test_secure_client_make_request_401_error(
+    mock_httpx_client, secure_client_keys_exist
+):
+    """Test _make_request handles 401 Unauthorized HTTP errors."""
+    mock_httpx_client.request.return_value.status_code = 401
+    mock_httpx_client.request.return_value.raise_for_status.side_effect = httpx.HTTPStatusError(
+        "Unauthorized",
+        request=httpx.Request("GET", "https://test.com"),
+        response=httpx.Response(401, request=httpx.Request("GET", "https://test.com")),
+    )
+
+    client = secure_client_keys_exist
+    with pytest.raises(PermissionError, match="Authentication failed"):
+        client.get("/protected")
+
+
+def test_secure_client_make_request_403_error(
+    mock_httpx_client, secure_client_keys_exist
+):
+    """Test _make_request handles 403 Forbidden HTTP errors."""
+    mock_httpx_client.request.return_value.status_code = 403
+    mock_httpx_client.request.return_value.raise_for_status.side_effect = httpx.HTTPStatusError(
+        "Forbidden",
+        request=httpx.Request("GET", "https://test.com"),
+        response=httpx.Response(403, request=httpx.Request("GET", "https://test.com")),
+    )
+
+    client = secure_client_keys_exist
+    with pytest.raises(PermissionError, match="Access denied"):
+        client.get("/forbidden")
 
 
 def test_secure_client_make_request_http_error(
@@ -537,25 +596,135 @@ def test_device_agent_collect_telemetry(mock_device_agent_dependencies):
     assert telemetry["system"]["memory_usage"]["percent"] == pytest.approx(50.0)
     assert telemetry["system"]["disk_usage"]["percent"] == pytest.approx(70.0)
     assert telemetry["system"]["temperature"] == pytest.approx(45.0)
-    assert telemetry["network"]["ip_address"] == MOCK_IP_ADDRESS # Use the constant here
+    assert telemetry["network"]["ip_address"] == MOCK_IP_ADDRESS
 
 
-def test_device_agent_collect_telemetry_error_handling(
+def test_device_agent_collect_telemetry_error_handling_general(
     mock_device_agent_dependencies,
 ):
-    """Test _collect_telemetry handles errors in helper methods."""
+    """Test _collect_telemetry handles general errors in helper methods."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
     agent = DeviceAgent(mock_client)
 
     # Make _get_uptime raise an error
     with patch(
         "equus_express.client.DeviceAgent._get_uptime",
-        side_effect=Exception("Uptime error"),
+        side_effect=OSError("Uptime error"),
     ):
         telemetry = agent._collect_telemetry()
-        # The _collect_telemetry catches helper errors and puts them in 'application.last_error'
-        assert "application" in telemetry
-        assert "last_error" in telemetry["application"]
         assert "uptime: Uptime error" in telemetry["application"]["last_error"]
-        # Also assert that the uptime field itself is marked as an error
         assert telemetry["system"]["uptime"] == "error"
+
+
+def test_device_agent_collect_telemetry_cpu_usage_error(mock_device_agent_dependencies):
+    """Test _collect_telemetry handles CPU usage errors."""
+    mock_client = mock_device_agent_dependencies["mock_client_instance"]
+    agent = DeviceAgent(mock_client)
+    with patch(
+        "equus_express.client.DeviceAgent._get_cpu_usage",
+        side_effect=psutil.Error("CPU error"),
+    ):
+        telemetry = agent._collect_telemetry()
+        assert "cpu_usage: CPU error" in telemetry["application"]["last_error"]
+        assert telemetry["system"]["cpu_usage"] == "error"
+
+
+def test_device_agent_collect_telemetry_cpu_usage_not_implemented(mock_device_agent_dependencies):
+    """Test _collect_telemetry handles CPU usage when psutil is not implemented."""
+    mock_client = mock_device_agent_dependencies["mock_client_instance"]
+    agent = DeviceAgent(mock_client)
+    with patch("equus_express.client.psutil", new=None): # Temporarily set psutil to None
+        telemetry = agent._collect_telemetry()
+        assert "cpu_usage: psutil library is not available." in telemetry["application"]["last_error"]
+        assert telemetry["system"]["cpu_usage"] == "error"
+
+
+def test_device_agent_collect_telemetry_memory_usage_error(mock_device_agent_dependencies):
+    """Test _collect_telemetry handles memory usage errors."""
+    mock_client = mock_device_agent_dependencies["mock_client_instance"]
+    agent = DeviceAgent(mock_client)
+    with patch(
+        "equus_express.client.DeviceAgent._get_memory_usage",
+        side_effect=psutil.Error("Memory error"),
+    ):
+        telemetry = agent._collect_telemetry()
+        assert "memory_usage: Memory error" in telemetry["application"]["last_error"]
+        assert "error" in telemetry["system"]["memory_usage"]
+
+
+def test_device_agent_collect_telemetry_memory_usage_not_implemented(mock_device_agent_dependencies):
+    """Test _collect_telemetry handles memory usage when psutil is not implemented."""
+    mock_client = mock_device_agent_dependencies["mock_client_instance"]
+    agent = DeviceAgent(mock_client)
+    with patch("equus_express.client.psutil", new=None):
+        telemetry = agent._collect_telemetry()
+        assert "memory_usage: psutil library is not available." in telemetry["application"]["last_error"]
+        assert "error" in telemetry["system"]["memory_usage"]
+
+
+def test_device_agent_collect_telemetry_disk_usage_error(mock_device_agent_dependencies):
+    """Test _collect_telemetry handles disk usage errors."""
+    mock_client = mock_device_agent_dependencies["mock_client_instance"]
+    agent = DeviceAgent(mock_client)
+    with patch(
+        "equus_express.client.DeviceAgent._get_disk_usage",
+        side_effect=psutil.Error("Disk error"),
+    ):
+        telemetry = agent._collect_telemetry()
+        assert "disk_usage: Disk error" in telemetry["application"]["last_error"]
+        assert "error" in telemetry["system"]["disk_usage"]
+
+
+def test_device_agent_collect_telemetry_disk_usage_not_implemented(mock_device_agent_dependencies):
+    """Test _collect_telemetry handles disk usage when psutil is not implemented."""
+    mock_client = mock_device_agent_dependencies["mock_client_instance"]
+    agent = DeviceAgent(mock_client)
+    with patch("equus_express.client.psutil", new=None):
+        telemetry = agent._collect_telemetry()
+        assert "disk_usage: psutil library is not available." in telemetry["application"]["last_error"]
+        assert "error" in telemetry["system"]["disk_usage"]
+
+
+def test_device_agent_collect_telemetry_temperature_error(mock_device_agent_dependencies):
+    """Test _collect_telemetry handles temperature errors."""
+    mock_client = mock_device_agent_dependencies["mock_client_instance"]
+    agent = DeviceAgent(mock_client)
+    with patch(
+        "equus_express.client.DeviceAgent._get_temperature",
+        side_effect=OSError("Temp file error"),
+    ):
+        telemetry = agent._collect_telemetry()
+        assert "temperature: Temp file error" in telemetry["application"]["last_error"]
+        assert telemetry["system"]["temperature"] == "error"
+
+
+def test_device_agent_collect_telemetry_ip_address_psutil_error(mock_device_agent_dependencies):
+    """Test _collect_telemetry handles IP address errors from psutil."""
+    mock_client = mock_device_agent_dependencies["mock_client_instance"]
+    agent = DeviceAgent(mock_client)
+    with patch(
+        "equus_express.client.psutil.net_if_addrs",
+        side_effect=psutil.Error("Net if addrs error"),
+    ), patch(
+        "equus_express.client.socket.gethostbyname",
+        side_effect=socket.gaierror("Hostname error") # Ensure fallback also fails
+    ):
+        telemetry = agent._collect_telemetry()
+        assert "ip_address: Hostname error" in telemetry["application"]["last_error"] # Fallback error is reported
+        assert telemetry["network"]["ip_address"] == "error"
+
+
+def test_device_agent_collect_telemetry_ip_address_socket_error(mock_device_agent_dependencies):
+    """Test _collect_telemetry handles IP address errors from socket fallback."""
+    mock_client = mock_device_agent_dependencies["mock_client_instance"]
+    agent = DeviceAgent(mock_client)
+    with patch(
+        "equus_express.client.psutil.net_if_addrs",
+        side_effect=psutil.Error("Simulate psutil not finding IP"),
+    ), patch(
+        "equus_express.client.socket.gethostbyname",
+        side_effect=socket.gaierror("gethostbyname error"),
+    ):
+        telemetry = agent._collect_telemetry()
+        assert "ip_address: gethostbyname error" in telemetry["application"]["last_error"]
+        assert telemetry["network"]["ip_address"] == "error"
