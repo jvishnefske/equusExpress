@@ -120,9 +120,117 @@ def test_send_telemetry():
 
     assert telemetry_record is not None
     assert telemetry_record[0] == TEST_DEVICE_ID
-    assert (
-        "temp" in telemetry_record[1]
-    )  # Check if data is stored as JSON string
+    assert "temp" in telemetry_record[1]  # Check if data is stored as JSON string
+
+
+def test_get_authenticated_device_id_missing_header():
+    """Test get_authenticated_device_id when X-Device-Id header is missing."""
+    # Attempt to access an authenticated endpoint without the header
+    response = client.get("/api/device/info")
+    assert response.status_code == 401
+    assert "Authentication required" in response.json()["detail"]
+
+
+def test_register_device_missing_fields():
+    """Test device registration with missing device_id or public_key."""
+    response = client.post("/api/register", json={"public_key": TEST_PUBLIC_KEY})
+    assert response.status_code == 400
+    assert "Device ID and public key are required" in response.json()["detail"]
+
+    response = client.post("/api/register", json={"device_id": TEST_DEVICE_ID})
+    assert response.status_code == 400
+    assert "Device ID and public key are required" in response.json()["detail"]
+
+
+def test_receive_telemetry_device_id_mismatch():
+    """Test receiving telemetry with device ID mismatch between payload and header."""
+    # First, register a device
+    client.post(
+        "/api/register",
+        json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+    )
+
+    telemetry_data = {
+        "device_id": "mismatched_device_id",  # Mismatched ID
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "data": {"temp": 25.5},
+    }
+    response = client.post(
+        "/api/telemetry",
+        json=telemetry_data,
+        headers={"X-Device-Id": TEST_DEVICE_ID},
+    )
+    assert response.status_code == 403
+    assert "Device ID in payload does not match authenticated device." in response.json()["detail"]
+
+
+def test_update_device_status_device_id_mismatch():
+    """Test updating device status with device ID mismatch between payload and header."""
+    # First, register a device
+    client.post(
+        "/api/register",
+        json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+    )
+
+    status_data = {
+        "device_id": "mismatched_device_id",  # Mismatched ID
+        "status": "active",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    response = client.post(
+        "/api/device/status",
+        json=status_data,
+        headers={"X-Device-Id": TEST_DEVICE_ID},
+    )
+    assert response.status_code == 403
+    assert "Device ID in payload does not match authenticated device." in response.json()["detail"]
+
+
+def test_get_device_config_device_id_mismatch():
+    """Test getting device config with device ID mismatch between path and header."""
+    # First, register a device
+    client.post(
+        "/api/register",
+        json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+    )
+
+    mismatched_device_id = "another_device"
+    response = client.get(
+        f"/api/device/{mismatched_device_id}/config",
+        headers={"X-Device-Id": TEST_DEVICE_ID},
+    )
+    assert response.status_code == 403
+    assert "Access denied: Device ID mismatch." in response.json()["detail"]
+
+
+def test_list_devices_empty():
+    """Test listing devices when no devices are registered."""
+    response = client.get("/api/admin/devices")
+    assert response.status_code == 200
+    assert response.json()["devices"] == []
+
+
+def test_get_device_telemetry_no_telemetry():
+    """Test getting telemetry for a device that exists but has no telemetry."""
+    # Register a device first
+    client.post(
+        "/api/register",
+        json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+    )
+
+    response = client.get(f"/api/admin/telemetry/{TEST_DEVICE_ID}")
+    assert response.status_code == 200
+    assert response.json()["device_id"] == TEST_DEVICE_ID
+    assert response.json()["telemetry"] == []
+
+
+def test_get_device_telemetry_device_not_found():
+    """Test getting telemetry for a device that does not exist."""
+    non_existent_device_id = "non_existent_device"
+    response = client.get(f"/api/admin/telemetry/{non_existent_device_id}")
+    assert response.status_code == 200  # Server returns 200 with empty list for non-existent device
+    assert response.json()["device_id"] == non_existent_device_id
+    assert response.json()["telemetry"] == []
 
 
 def test_update_device_status():
