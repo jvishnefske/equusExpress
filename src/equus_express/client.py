@@ -24,8 +24,6 @@ logger = logging.getLogger(__name__)
 
 # Define default key storage directory
 DEFAULT_KEY_DIR = os.path.expanduser("~/.equus_express/keys")
-CLIENT_PRIVATE_KEY_FILE = os.path.join(DEFAULT_KEY_DIR, "device.pem")
-CLIENT_PUBLIC_KEY_FILE = os.path.join(DEFAULT_KEY_DIR, "device.pub")
 
 
 class SecureAPIClient:
@@ -46,10 +44,11 @@ class SecureAPIClient:
         self.base_url = base_url.rstrip("/")
         self.device_id = device_id or socket.gethostname()
         self.key_dir = key_dir
+        self._private_key_path = os.path.join(self.key_dir, "device.pem")
+        self._public_key_path = os.path.join(self.key_dir, "device.pub")
         self.private_key = None
         self.public_key_pem = None
 
-        os.makedirs(self.key_dir, exist_ok=True)
         self._load_or_generate_keys()
 
         # Create httpx client
@@ -67,16 +66,15 @@ class SecureAPIClient:
 
     def _load_or_generate_keys(self):
         """Load existing keys or generate new RSA key pair."""
-        private_key_path = CLIENT_PRIVATE_KEY_FILE
-        public_key_path = CLIENT_PUBLIC_KEY_FILE
+        os.makedirs(self.key_dir, exist_ok=True) # Ensure directory exists
 
-        if os.path.exists(private_key_path) and os.path.exists(public_key_path):
-            with open(private_key_path, "rb") as f:
+        if os.path.exists(self._private_key_path) and os.path.exists(self._public_key_path):
+            with open(self._private_key_path, "rb") as f:
                 self.private_key = serialization.load_pem_private_key(
                     f.read(), password=None, backend=default_backend()
                 )
-            with open(public_key_path, "rb") as f:
-                self.public_key_pem = f.read().decode("utf-8")
+            with open(self._public_key_path, "rb") as f:
+                self.public_key_pem = f.read().decode("utf-8").strip() # Strip newline here
             logger.info("Existing device keys loaded.")
         else:
             logger.info("Generating new device keys...")
@@ -89,18 +87,18 @@ class SecureAPIClient:
                 format=serialization.PrivateFormat.PKCS8,
                 encryption_algorithm=serialization.NoEncryption(),
             )
-            with open(private_key_path, "wb") as f:
-                f.write(pem_private_key)
-
             # Serialize public key
-            public_key = self.private_key.public_key()
-            self.public_key_pem = public_key.public_bytes(
+            pem_public_key = self.private_key.public_key().public_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PublicFormat.SubjectPublicKeyInfo,
-            ).decode("utf-8")
-            with open(public_key_path, "w") as f:
-                f.write(self.public_key_pem)
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+            self.public_key_pem = pem_public_key.decode("utf-8").strip() # Strip newline here
 
+            with open(self._private_key_path, "wb") as f:
+                f.write(pem_private_key)
+            with open(self._public_key_path, "wb") as f:
+                f.write(pem_public_key)
             logger.info(
                 f"New device keys generated and saved to {self.key_dir}"
             )
