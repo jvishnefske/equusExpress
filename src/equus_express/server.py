@@ -341,8 +341,11 @@ def register_or_update_device(device_id: str, public_key: str, ip_address: str):
         conn.close()
         logger.info(f"Device {device_id} registered/updated with public key.")
 
-    except Exception as e:
+    except sqlite3.Error as e: # Catch specific database errors
         logger.error(f"Failed to register/update device {device_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error during registration: {e}")
+    except Exception as e: # Catch any other unexpected errors
+        logger.error(f"An unexpected error occurred during device registration for {device_id}: {e}")
 
 
 @app.get("/")
