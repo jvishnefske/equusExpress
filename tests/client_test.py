@@ -289,9 +289,10 @@ def test_secure_client_register_device(
     """Test register_device sends correct payload."""
     client = secure_client_keys_exist
     client.register_device()
-    mock_httpx_client.request.assert_called_with( # Changed mock_requests_session to mock_httpx_client
+    mock_httpx_client.request.assert_called_with(
         "POST",
         f"{TEST_BASE_URL}/api/register",
+        data=None,  # Added data=None to match actual call
         json={
             "device_id": TEST_DEVICE_ID,
             "public_key": MOCK_PUBLIC_KEY_PEM.strip(),
@@ -325,6 +326,7 @@ def test_secure_client_send_telemetry(
     mock_httpx_client.request.assert_called_with(
         "POST",
         f"{TEST_BASE_URL}/api/telemetry",
+        data=None,  # Added data=None to match actual call
         json={
             "device_id": TEST_DEVICE_ID,
             "timestamp": "2025-01-01T12:00:00+00:00",
@@ -360,6 +362,7 @@ def test_secure_client_update_status(
     mock_httpx_client.request.assert_called_with(
         "POST",
         f"{TEST_BASE_URL}/api/device/status",
+        data=None,  # Added data=None to match actual call
         json={
             "device_id": TEST_DEVICE_ID,
             "status": test_status,
