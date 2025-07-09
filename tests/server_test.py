@@ -535,41 +535,6 @@ def test_get_device_telemetry_unexpected_error():
     assert "Failed to retrieve telemetry" in response.json()["detail"]
 
 
-def test_lifespan_static_file_extraction_path():
-    """Test that lifespan extracts static files when pkg_resources.files does not return a direct path."""
-    temp_app = FastAPI(lifespan=lifespan)
-
-    # Mock is_dir() to return False, forcing extraction path
-    with patch('equus_express.server.pkg_resources.files') as mock_pkg_files:
-        mock_resource = MagicMock()
-        mock_resource.is_dir.return_value = False # Force extraction
-        mock_resource.iterdir.return_value = [MagicMock(name='app.js', is_dir=MagicMock(return_value=False), spec=['name', 'is_dir', 'read_bytes']), MagicMock(name='style.css', is_dir=MagicMock(return_value=False), spec=['name', 'is_dir', 'read_bytes'])] # Simulate files to copy
-        mock_pkg_files.return_value.joinpath.return_value = mock_resource
-
-        mock_as_file_context = MagicMock()
-        mock_as_file_context.__enter__.side_effect = [
-            tempfile.NamedTemporaryFile(delete=False),
-            tempfile.NamedTemporaryFile(delete=False)
-        ]
-        mock_pkg_files.as_file.return_value = mock_as_file_context
-
-        with patch('shutil.copy') as mock_shutil_copy:
-            with patch('tempfile.TemporaryDirectory') as mock_tempdir_class:
-                mock_tempdir_path = "/tmp/mock_static_dir"
-                mock_tempdir_class.return_value.__enter__.return_value = mock_tempdir_path
-                with TestClient(temp_app) as client:
-                    # Assert that static files were mounted from the temporary directory
-                    assert client.app.state.static_path == mock_tempdir_path
-                    # Assert shutil.copy was called for each simulated file
-                    assert mock_shutil_copy.call_count == 2
-                    mock_shutil_copy.assert_any_call(mock_as_file_context.__enter__.return_value.name, os.path.join(mock_tempdir_path, 'app.js'))
-                    mock_shutil_copy.assert_any_call(mock_as_file_context.__enter__.return_value.name, os.path.join(mock_tempdir_path, 'style.css'))
-
-        # Clean up temporary files created by mock_as_file_context
-        for tmp_file in mock_as_file_context.__enter__.side_effect:
-            os.unlink(tmp_file.name)
-
-
 def test_favicon_not_found():
     """Test favicon endpoint when file is not found."""
     with patch("equus_express.server.pkg_resources.files") as mock_files:

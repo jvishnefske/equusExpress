@@ -355,7 +355,7 @@ def register_or_update_device(
         )
     except Exception as e:  # Catch any other unexpected errors
         logger.error(
-            f"An unexpected error occurred during device registration for {device_id}: {e}"
+            f"An unexpected error occurred during device registration for device {repr(device_id)}: {e}"
         )
 
 
