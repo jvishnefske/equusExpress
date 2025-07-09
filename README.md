@@ -1,6 +1,8 @@
-# Placeholder App 🐎
+# Equus Express 🐎
 
-This is a placeholder repository for a generic application. It serves as a starting point for new projects.
+**Automation Engineers, are you tired of the complexity of managing and monitoring your custom industrial devices running critical batch processes?**
+
+Equus Express provides a robust, secure, and scalable solution for device registration, telemetry collection, and remote management. Empower your custom hardware to seamlessly integrate with your operations, ensuring reliable data flow and actionable insights for your automated workflows. Take control of your industrial IoT deployment with confidence.
 
 ## Badges
 
