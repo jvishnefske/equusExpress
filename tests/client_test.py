@@ -5,6 +5,7 @@ import json
 from unittest.mock import patch, MagicMock, mock_open
 from datetime import datetime, timezone
 import time
+import requests # New import
 
 # Import the classes to be tested
 from src.equus_express.client import SecureAPIClient, DeviceAgent
