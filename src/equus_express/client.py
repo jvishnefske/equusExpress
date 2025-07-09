@@ -18,17 +18,16 @@ from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.backends import default_backend
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Import psutil if available (optional dependency for telemetry)
 try:
     import psutil
 except ImportError:
     psutil = None
     logger.warning("psutil not found. Some telemetry data might be unavailable.")
-
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Define default key storage directory
 DEFAULT_KEY_DIR = os.path.expanduser("~/.equus_express/keys")
