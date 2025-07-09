@@ -12,7 +12,7 @@ import json
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 import socket
 
 from cryptography.hazmat.primitives import serialization, hashes
@@ -187,7 +187,7 @@ class SecureAPIClient:
         """Send telemetry data to server"""
         telemetry_payload = {
             "device_id": self.device_id,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "data": data
         }
         return self.post("/api/telemetry", json=telemetry_payload)
@@ -201,7 +201,7 @@ class SecureAPIClient:
         status_payload = {
             "device_id": self.device_id,
             "status": status,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "details": details or {}
         }
         return self.post("/api/device/status", json=status_payload)
@@ -254,7 +254,7 @@ class DeviceAgent:
 
         # Send initial status after successful connection/registration
         self.client.update_status("online", {
-            "startup_time": datetime.utcnow().isoformat(),
+            "startup_time": datetime.now(timezone.utc).isoformat(),
             "version": "1.0" # You might want to get this from somewhere dynamically
         })
 
@@ -268,7 +268,7 @@ class DeviceAgent:
         # Send offline status
         try:
             self.client.update_status("offline", {
-                "shutdown_time": datetime.utcnow().isoformat()
+                "shutdown_time": datetime.now(timezone.utc).isoformat()
             })
         except Exception as e:
             logger.warning(f"Failed to send offline status: {e}")
