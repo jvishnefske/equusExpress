@@ -496,19 +496,36 @@ class DeviceAgent:
             raise
 
     def _get_ip_address(self) -> str:
-        """Get device IP address"""
+        """Get device IP address (prefer non-loopback IPv4, fallback to hostname resolution)"""
+        # Attempt to get IP using psutil for more robustness
+        if psutil:
+            try:
+                for interface_name, interface_addresses in psutil.net_if_addrs().items():
+                    for address in interface_addresses:
+                        # Check for IPv4 address and ensure it's not a loopback address
+                        if address.family == socket.AF_INET and not address.address.startswith('127.'):
+                            logger.debug(f"Found IP via psutil: {address.address}")
+                            return address.address
+                # If psutil found no non-loopback IPv4 address, log a warning and fall through
+                logger.warning("psutil found no non-loopback IPv4 address. Falling back to hostname resolution.")
+            except psutil.Error as e:
+                logger.warning(f"psutil IP address detection failed: {e}. Falling back to hostname resolution.")
+        else:
+            logger.debug("psutil not available for robust IP address detection. Falling back to hostname resolution.")
+
+        # Fallback to gethostbyname(gethostname())
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
+            # gethostname() retrieves the local host's name
+            # gethostbyname() resolves a host name to an IPv4 address
+            ip = socket.gethostbyname(socket.gethostname())
+            logger.debug(f"Resolved IP via gethostbyname(gethostname()): {ip}")
             return ip
-        except (
-            socket.error,
-            OSError,
-        ) as e:  # Catch specific socket and OS errors
-            logger.warning(f"Failed to get IP address: {e}")
-            raise  # Re-raise for _collect_telemetry to catch and report
+        except socket.gaierror as e: # Address information error (e.g., hostname not found)
+            logger.warning(f"Failed to get IP address via hostname resolution: {e}")
+            raise # Re-raise for _collect_telemetry to catch and report
+        except OSError as e: # General OS error during hostname resolution
+            logger.warning(f"OS error during IP address retrieval from hostname: {e}")
+            raise # Re-raise for _collect_telemetry to catch and report
 
 
 def main():
