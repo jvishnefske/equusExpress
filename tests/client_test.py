@@ -8,7 +8,7 @@ import time
 import httpx # Changed from requests
 
 # Import the classes to be tested
-from src.equus_express.client import SecureAPIClient, DeviceAgent
+from equus_express.client import SecureAPIClient, DeviceAgent
 
 # Constants for testing
 TEST_BASE_URL = "http://mock-server"
