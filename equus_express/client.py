@@ -15,68 +15,93 @@ import time
 from datetime import datetime
 import socket
 
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.backends import default_backend
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Define default key storage directory
+DEFAULT_KEY_DIR = os.path.expanduser("~/.equus_express/keys")
+CLIENT_PRIVATE_KEY_FILE = os.path.join(DEFAULT_KEY_DIR, "device.pem")
+CLIENT_PUBLIC_KEY_FILE = os.path.join(DEFAULT_KEY_DIR, "device.pub")
+
 
 class SecureAPIClient:
     def __init__(self,
-                 secure_base_url: str,
-                 client_cert_file: str = "/etc/ssl/certs/device.crt",
-                 client_key_file: str = "/etc/ssl/private/device.key",
-                 ca_cert_file: str = "/etc/ssl/certs/ca.crt",
-                 device_id: str = None):
+                 base_url: str,
+                 device_id: str = None,
+                 key_dir: str = DEFAULT_KEY_DIR):
         """
-        Initialize the secure API client with mTLS authentication
+        Initialize the secure API client with public key management.
 
         Args:
-            secure_base_url: Base URL of the secure API server (HTTPS)
-            client_cert_file: Path to client certificate file
-            client_key_file: Path to client private key file
-            ca_cert_file: Path to CA certificate file
-            device_id: Device identifier for logging
+            base_url: Base URL of the API server (e.g., HTTP for Traefik proxy)
+            device_id: Device identifier
+            key_dir: Directory to store generated private/public keys
         """
-        self.base_url = secure_base_url.rstrip('/')
-        self.client_cert_file = client_cert_file
-        self.client_key_file = client_key_file
-        self.ca_cert_file = ca_cert_file
+        self.base_url = base_url.rstrip('/')
         self.device_id = device_id or socket.gethostname()
+        self.key_dir = key_dir
+        self.private_key = None
+        self.public_key_pem = None
 
-        # Validate certificate files exist
-        self._validate_certificates()
+        os.makedirs(self.key_dir, exist_ok=True)
+        self._load_or_generate_keys()
 
-        # Create session with certificate authentication
+        # Create session (no client cert for now, will rely on new auth)
         self.session = requests.Session()
+        self.session.verify = False # Assuming Traefik handles server SSL, or running HTTP
+        urllib3.disable_warnings(InsecureRequestWarning) # Suppress warnings if verify=False
 
-        # Configure client certificate
-        self.session.cert = (client_cert_file, client_key_file)
-
-        # Configure server certificate verification
-        if os.path.exists(ca_cert_file):
-            self.session.verify = ca_cert_file
-        else:
-            logger.warning("CA certificate not found, disabling SSL verification")
-            self.session.verify = False
-            urllib3.disable_warnings(InsecureRequestWarning)
-
-        # Set default headers
+        # Set default headers, including device ID for identification
         self.session.headers.update({
             'User-Agent': f'SecureClient/{self.device_id}',
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'X-Device-Id': self.device_id # Temporarily pass device_id in header for simplified auth
         })
 
-        logger.info(f"Initialized secure client for device: {self.device_id}")
+        logger.info(f"Initialized client for device: {self.device_id}")
 
-    def _validate_certificates(self):
-        """Validate that required certificate files exist"""
-        required_files = [self.client_cert_file, self.client_key_file]
+    def _load_or_generate_keys(self):
+        """Load existing keys or generate new RSA key pair."""
+        private_key_path = CLIENT_PRIVATE_KEY_FILE
+        public_key_path = CLIENT_PUBLIC_KEY_FILE
 
-        for file_path in required_files:
-            if not os.path.exists(file_path):
-                raise FileNotFoundError(f"Required certificate file not found: {file_path}")
+        if os.path.exists(private_key_path) and os.path.exists(public_key_path):
+            with open(private_key_path, "rb") as f:
+                self.private_key = serialization.load_pem_private_key(f.read(), password=None, backend=default_backend())
+            with open(public_key_path, "rb") as f:
+                self.public_key_pem = f.read().decode('utf-8')
+            logger.info("Existing device keys loaded.")
+        else:
+            logger.info("Generating new device keys...")
+            self.private_key = rsa.generate_private_key(
+                public_exponent=65537,
+                key_size=2048,
+                backend=default_backend()
+            )
+            # Serialize private key
+            pem_private_key = self.private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption()
+            )
+            with open(private_key_path, "wb") as f:
+                f.write(pem_private_key)
 
-        logger.info("Certificate files validated")
+            # Serialize public key
+            public_key = self.private_key.public_key()
+            self.public_key_pem = public_key.public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo
+            ).decode('utf-8')
+            with open(public_key_path, "w") as f:
+                f.write(self.public_key_pem)
+
+            logger.info(f"New device keys generated and saved to {self.key_dir}")
 
     def _make_request(self, method: str, endpoint: str, **kwargs):
         """Make a request with error handling and logging"""
@@ -132,6 +157,24 @@ class SecureAPIClient:
         """Make a DELETE request"""
         return self._make_request('DELETE', endpoint, **kwargs)
 
+    def register_device(self):
+        """Register the device's public key with the server."""
+        if not self.public_key_pem:
+            raise RuntimeError("Public key not available for registration.")
+
+        logger.info(f"Attempting to register device '{self.device_id}' with server...")
+        registration_payload = {
+            "device_id": self.device_id,
+            "public_key": self.public_key_pem
+        }
+        try:
+            response = self.post("/api/register", json=registration_payload)
+            logger.info(f"Device registration response: {response}")
+            return response
+        except Exception as e:
+            logger.error(f"Failed to register device: {e}")
+            raise
+
     def health_check(self):
         """Check server health"""
         return self.get("/health")
@@ -166,31 +209,29 @@ class SecureAPIClient:
     def test_connection(self):
         """Test the secure connection and certificate authentication"""
         try:
-            logger.info("Testing secure connection...")
+            logger.info("Testing connection and registration...")
 
             # Test basic connectivity
             response = self.health_check()
             logger.info(f"Health check response: {response}")
 
-            # Test authenticated endpoint
+            # Attempt to register device (or re-register if already done)
+            registration_response = self.register_device()
+            logger.info(f"Device registration/update response: {registration_response}")
+
+            # Test an endpoint that relies on registered device_id (e.g., get_device_info)
+            # The server now relies on X-Device-Id header for initial simplified auth.
             try:
                 device_info = self.get_device_info()
                 logger.info(f"Device info: {device_info}")
             except Exception as e:
-                logger.warning(f"Device info endpoint failed: {e}")
+                logger.warning(f"Device info endpoint failed (this might be expected if server requires stronger auth post-registration): {e}")
 
-            # Test certificate info endpoint
-            try:
-                cert_info = self.get("/api/auth/cert-info")
-                logger.info(f"Certificate info: {cert_info}")
-            except Exception as e:
-                logger.warning(f"Certificate info endpoint failed: {e}")
-
-            logger.info("✅ Secure connection test successful!")
+            logger.info("✅ Connection test and initial registration step completed!")
             return True
 
         except Exception as e:
-            logger.error(f"❌ Secure connection test failed: {e}")
+            logger.error(f"❌ Connection test or registration failed: {e}")
             return False
 
 
@@ -206,15 +247,15 @@ class DeviceAgent:
         logger.info("Starting device agent...")
         self.running = True
 
-        # Initial connection test
+        # Perform connection test and registration
         if not self.client.test_connection():
-            logger.error("Failed to establish secure connection")
+            logger.error("Failed initial connection and registration.")
             return False
 
-        # Send initial status
+        # Send initial status after successful connection/registration
         self.client.update_status("online", {
             "startup_time": datetime.utcnow().isoformat(),
-            "version": "1.0"
+            "version": "1.0" # You might want to get this from somewhere dynamically
         })
 
         return True
@@ -361,8 +402,10 @@ def main():
     device_id = sys.argv[2] if len(sys.argv) > 2 else None
 
     try:
-        # Create secure client
-        client = SecureAPIClient(server_url, device_id=device_id)
+        # Create client
+        # The base_url should now be HTTP, as Traefik handles HTTPS.
+        # Example: http://secure-server:8000
+        client = SecureAPIClient(base_url=server_url, device_id=device_id)
 
         # Create device agent
         agent = DeviceAgent(client)
