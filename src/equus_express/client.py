@@ -531,9 +531,63 @@ class DeviceAgent:
             raise  # Re-raise for _collect_telemetry to catch and report
 
 
-import sys # Import sys for main function tests
+def main():
+    """Main function for running the secure client"""
+    import sys # Moved import sys here
 
-# ... (rest of the file content) ...
+    if len(sys.argv) < 2:
+        # Uncovered: Not enough arguments for main
+        print(
+            "Usage: python3 secure_client.py <secure_server_url> [device_id]"
+        )
+        print("Example: python3 secure_client.py https://secure-server:8443")
+        sys.exit(1) # Uncovered: Exit on missing arguments
+
+    server_url = sys.argv[1]
+    device_id = sys.argv[2] if len(sys.argv) > 2 else None
+
+    try:
+        # Create client
+        # The base_url should now be HTTP, as Traefik handles HTTPS.
+        # Example: http://secure-server:8000
+        client = SecureAPIClient(base_url=server_url, device_id=device_id)
+
+        # Create device agent
+        agent = DeviceAgent(client)
+
+        # Start agent
+        if agent.start():
+            logger.info("Device agent started successfully")
+
+            # Run telemetry loop
+            try:
+                agent.run_telemetry_loop(interval=30)  # 30 second intervals
+            except KeyboardInterrupt:
+                logger.info("Telemetry loop stopped by user.")
+            except (
+                Exception
+            ) as e:  # Catch any unhandled errors in telemetry loop
+                # Uncovered: Unhandled error in telemetry loop
+                logger.critical(
+                    f"Unhandled error in telemetry loop, agent stopping: {e}"
+                )
+            finally:
+                agent.stop()
+        else:
+            logger.error("Failed to start device agent")
+            sys.exit(1) # Uncovered: Exit if agent fails to start
+
+    except (RuntimeError, ConnectionError, PermissionError) as e:
+        # Uncovered: Critical client error (e.g., key initialization failure)
+        logger.error(f"A critical client error occurred: {e}")
+        sys.exit(1) # Uncovered: Exit on critical client error
+    except Exception as e:
+        # Uncovered: Any unexpected error in main process
+        logger.exception(
+            f"An unexpected error occurred in the main client process: {e}"
+        )
+        sys.exit(1) # Uncovered: Exit on unexpected main error
+
 
 @pytest.fixture(autouse=True)
 def mock_sys_exit():
@@ -636,7 +690,3 @@ def test_main_unexpected_error(mock_sys_exit, caplog):
 
     mock_sys_exit.assert_called_once_with(1)
     assert "An unexpected error occurred in the main client process: Unexpected client error" in caplog.text
-
-
-if __name__ == "__main__":
-    main()

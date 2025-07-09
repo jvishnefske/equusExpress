@@ -6,6 +6,8 @@ import httpx
 from equus_express.client import SecureAPIClient, DeviceAgent, PsutilNotInstalled # Added PsutilNotInstalled
 import os
 import socket
+import logging # Import logging for caplog
+import sys # Import sys for main function tests
 # Removed psutil import as it's not required for unit tests;
 # its behavior is mocked or tested when it's None in client.py
 
