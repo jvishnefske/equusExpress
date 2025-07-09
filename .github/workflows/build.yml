@@ -48,6 +48,7 @@ jobs:
       - name: test coverage
         run: |
           python3 -m pip install -e .[dev]
+          python3 -m pip install pytest coverage
           coverage run -m pytest
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v5
