@@ -1,5 +1,5 @@
 import pytest
-import main
+from equus_express import main
 
 def test_app():
     main.main()
