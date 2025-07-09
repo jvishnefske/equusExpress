@@ -460,16 +460,10 @@ def test_favicon_not_found():
 
 def test_lifespan_static_file_setup_error():
     """Test lifespan context manager handles errors during static file setup."""
-    # Temporarily remove the existing app lifespan and create a new one to test error scenario
-    original_lifespan = app.router.lifespan_context
-    del app.router.lifespan_context # This is needed for FastAPI's internal routing rebuild
-
     # Mock tempfile.TemporaryDirectory to raise an error
     with patch("equus_express.server.tempfile.TemporaryDirectory", side_effect=OSError("Temp dir error")):
         with pytest.raises(RuntimeError, match="Failed to initialize static file serving"):
-            # Call the lifespan context manager directly on the app instance
-            with app.lifespan_context(app):
-                pass # The context manager will try to set up static files here
-
-    # Restore original lifespan to avoid interfering with other tests
-    app.router.lifespan_context = original_lifespan # Re-add it after the test
+            # Create a new TestClient instance to trigger the lifespan context with the mock
+            # This instance will fail during its initialization due to the mocked error.
+            TestClient(app)
+    # No need to restore app.router.lifespan_context as the module-level client is not affected.
