@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.security import HTTPBearer
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 import ssl
 import os
@@ -20,6 +21,9 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Secure IoT API Server")
 security = HTTPBearer()
+
+# Mount a static directory to serve files like favicon.ico
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 # Data models
@@ -244,6 +248,11 @@ async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
+
+@app.get("/dashboard", response_class=HTMLResponse)
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse("static/favicon.ico")
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
