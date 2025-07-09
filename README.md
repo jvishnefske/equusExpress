@@ -43,8 +43,7 @@ This guide walks you through setting up a complete certificate provisioning syst
 Install the required Python packages using `uv`:
 
 ```bash
-uv pip install -r requirements.txt # Ensure your requirements.txt is up-to-date
-uv pip install cryptography pytest httpx # For client keys and testing
+uv pip install .[dev] # Install main and development dependencies from pyproject.toml
 ```
 
 ### 2. Run the Server
