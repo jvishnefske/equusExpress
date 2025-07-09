@@ -536,11 +536,11 @@ def test_device_agent_collect_telemetry(mock_device_agent_dependencies):
     assert "system" in telemetry
     assert "network" in telemetry
     assert "application" in telemetry
-    assert telemetry["system"]["uptime"] == 100.0
-    assert telemetry["system"]["cpu_usage"] == 25.0
-    assert telemetry["system"]["memory_usage"]["percent"] == 50
-    assert telemetry["system"]["disk_usage"]["percent"] == 70
-    assert telemetry["system"]["temperature"] == 45.0
+    assert telemetry["system"]["uptime"] == pytest.approx(100.0)
+    assert telemetry["system"]["cpu_usage"] == pytest.approx(25.0)
+    assert telemetry["system"]["memory_usage"]["percent"] == pytest.approx(50.0)
+    assert telemetry["system"]["disk_usage"]["percent"] == pytest.approx(70.0)
+    assert telemetry["system"]["temperature"] == pytest.approx(45.0)
     assert telemetry["network"]["ip_address"] == MOCK_IP_ADDRESS # Use the constant here
 
 
