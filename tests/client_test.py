@@ -432,16 +432,16 @@ def test_device_agent_run_telemetry_loop(mock_device_agent_dependencies):
 
     # Mock _collect_telemetry for predictable data
     with patch(
-        "equus_express.client.DeviceAgent._collect_telemetry", # Removed src.
+        "equus_express.client.DeviceAgent._collect_telemetry",
         return_value={"mock_data": 123},
     ):
-        with pytest.raises(
-            KeyboardInterrupt
-        ):  # Expect interrupt after 2 successful sleeps
-            agent.run_telemetry_loop(interval=1)
+        # The loop handles KeyboardInterrupt internally, so we don't expect it to be re-raised.
+        # The side_effect of mock_sleep will cause the loop to terminate.
+        agent.run_telemetry_loop(interval=1)
 
     assert mock_client.send_telemetry.call_count == 2
     mock_sleep.assert_any_call(1)  # Ensure sleep was called with interval
+    assert agent.running is True # The loop exits, but the 'running' flag is not changed by the loop itself.
 
 
 def test_device_agent_collect_telemetry(mock_device_agent_dependencies):
