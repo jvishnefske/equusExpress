@@ -15,7 +15,9 @@ from equus_express.client import SecureAPIClient, DeviceAgent
 TEST_BASE_URL = "http://mock-server"
 TEST_DEVICE_ID = "test_client_device"
 MOCK_PUBLIC_KEY_PEM = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsdfadsfadsfasdfasdf\n-----END PUBLIC KEY-----\n"
-MOCK_PRIVATE_KEY_PEM = b"-----BEGIN PRIVATE KEY-----MOCK_PRIVATE_KEY-----END PRIVATE KEY-----"
+MOCK_PRIVATE_KEY_PEM = (
+    b"-----BEGIN PRIVATE KEY-----MOCK_PRIVATE_KEY-----END PRIVATE KEY-----"
+)
 
 
 @pytest.fixture
@@ -35,7 +37,9 @@ def mock_crypto():
     mock_private_key = MagicMock()
     mock_public_key = MagicMock()
     mock_private_key.public_key.return_value = mock_public_key
-    mock_public_key.public_bytes.return_value = MOCK_PUBLIC_KEY_PEM.encode("utf-8")
+    mock_public_key.public_bytes.return_value = MOCK_PUBLIC_KEY_PEM.encode(
+        "utf-8"
+    )
     mock_private_key.private_bytes.return_value = MOCK_PRIVATE_KEY_PEM
 
     # Configure mock_open for reading (for secure_client_keys_exist scenario)
@@ -49,21 +53,23 @@ def mock_crypto():
         patch(
             "equus_express.client.rsa.generate_private_key"
         ) as mock_generate_private_key,
-        patch(
-            "equus_express.client.serialization"
-        ) as mock_serialization,
-        patch(
-            "equus_express.client.default_backend"
-        ) as mock_default_backend,
+        patch("equus_express.client.serialization") as mock_serialization,
+        patch("equus_express.client.default_backend") as mock_default_backend,
         patch("equus_express.client.open", m_open),
         patch("equus_express.client.os.path.exists") as mock_os_path_exists,
-        patch("equus_express.client.os.makedirs") as mock_os_makedirs
+        patch("equus_express.client.os.makedirs") as mock_os_makedirs,
     ):
         # Configure mock_serialization to behave like the actual module
         mock_serialization.Encoding.PEM = MagicMock(name="Encoding.PEM_mock")
-        mock_serialization.NoEncryption.return_value = MagicMock(name="NoEncryption_mock")
-        mock_serialization.PrivateFormat.PKCS8 = MagicMock(name="PrivateFormat.PKCS8_mock")
-        mock_serialization.PublicFormat.SubjectPublicKeyInfo = MagicMock(name="PublicFormat.SubjectPublicKeyInfo_mock")
+        mock_serialization.NoEncryption.return_value = MagicMock(
+            name="NoEncryption_mock"
+        )
+        mock_serialization.PrivateFormat.PKCS8 = MagicMock(
+            name="PrivateFormat.PKCS8_mock"
+        )
+        mock_serialization.PublicFormat.SubjectPublicKeyInfo = MagicMock(
+            name="PublicFormat.SubjectPublicKeyInfo_mock"
+        )
 
         mock_generate_private_key.return_value = mock_private_key
         mock_serialization.load_pem_private_key.return_value = mock_private_key
@@ -99,25 +105,29 @@ def mock_httpx_client():
 
 
 @pytest.fixture
-def secure_client_no_keys_exist(
-    tmp_key_dir, mock_crypto, mock_httpx_client
-):
+def secure_client_no_keys_exist(tmp_key_dir, mock_crypto, mock_httpx_client):
     """SecureAPIClient instance where no keys exist initially, simulating key generation."""
     # Configure mock_os_path_exists to return False for both key files checks
     mock_crypto["mock_os_path_exists"].side_effect = [False, False]
-    
+
     # os.makedirs is already patched in mock_crypto fixture, and client.py now calls it.
     client = SecureAPIClient(
         base_url=TEST_BASE_URL,
         device_id=TEST_DEVICE_ID,
-        key_dir=tmp_key_dir, # Ensure tmp_key_dir is passed
+        key_dir=tmp_key_dir,  # Ensure tmp_key_dir is passed
     )
     yield client
     # Assert that os.makedirs was called for the key_dir
-    mock_crypto["mock_os_makedirs"].assert_called_with(tmp_key_dir, exist_ok=True)
+    mock_crypto["mock_os_makedirs"].assert_called_with(
+        tmp_key_dir, exist_ok=True
+    )
     # Assert that keys were attempted to be written via mocked open
-    assert mock_crypto["mock_open"].call_args_list[0].args[0] == os.path.join(tmp_key_dir, "device.pem")
-    assert mock_crypto["mock_open"].call_args_list[1].args[0] == os.path.join(tmp_key_dir, "device.pub")
+    assert mock_crypto["mock_open"].call_args_list[0].args[0] == os.path.join(
+        tmp_key_dir, "device.pem"
+    )
+    assert mock_crypto["mock_open"].call_args_list[1].args[0] == os.path.join(
+        tmp_key_dir, "device.pub"
+    )
 
 
 @pytest.fixture
@@ -125,20 +135,26 @@ def secure_client_keys_exist(tmp_key_dir, mock_crypto, mock_httpx_client):
     """SecureAPIClient instance where keys already exist, simulating key loading."""
     # Configure mock_os_path_exists to return True for both key files checks
     mock_crypto["mock_os_path_exists"].side_effect = [True, True]
-    
+
     # No need to physically create dummy files as 'open' is mocked.
     # The 'mock_open' in 'mock_crypto' already provides read content for two reads.
     client = SecureAPIClient(
         base_url=TEST_BASE_URL,
         device_id=TEST_DEVICE_ID,
-        key_dir=tmp_key_dir, # Ensure tmp_key_dir is passed
+        key_dir=tmp_key_dir,  # Ensure tmp_key_dir is passed
     )
     yield client
     # Assert that os.makedirs was called for the key_dir (even if it exists)
-    mock_crypto["mock_os_makedirs"].assert_called_with(tmp_key_dir, exist_ok=True)
+    mock_crypto["mock_os_makedirs"].assert_called_with(
+        tmp_key_dir, exist_ok=True
+    )
     # Assert that keys were attempted to be read via mocked open
-    assert mock_crypto["mock_open"].call_args_list[0].args[0] == os.path.join(tmp_key_dir, "device.pem")
-    assert mock_crypto["mock_open"].call_args_list[1].args[0] == os.path.join(tmp_key_dir, "device.pub")
+    assert mock_crypto["mock_open"].call_args_list[0].args[0] == os.path.join(
+        tmp_key_dir, "device.pem"
+    )
+    assert mock_crypto["mock_open"].call_args_list[1].args[0] == os.path.join(
+        tmp_key_dir, "device.pub"
+    )
     # Verify load_pem_private_key was called, indicating successful key loading path
     mock_crypto["mock_serialization"].load_pem_private_key.assert_called_once()
 
@@ -157,7 +173,9 @@ def mock_device_agent_dependencies():
             return_value=TEST_DEVICE_ID,
         ),
         patch("equus_express.client.time.sleep") as mock_sleep,
-        patch("equus_express.client.datetime") as mock_datetime, # Patch datetime
+        patch(
+            "equus_express.client.datetime"
+        ) as mock_datetime,  # Patch datetime
         patch(
             "equus_express.client.SecureAPIClient.send_telemetry",
             return_value={"status": "success"},
@@ -181,11 +199,15 @@ def mock_device_agent_dependencies():
     ):
         # Configure mock_datetime
         mock_datetime.now.return_value = fixed_now
-        mock_datetime.timezone = timezone # Ensure timezone.utc is accessible on the mock
+        mock_datetime.timezone = (
+            timezone  # Ensure timezone.utc is accessible on the mock
+        )
 
         mock_client_instance = MockClient.return_value
         # Configure the mock client methods that DeviceAgent calls
-        mock_client_instance.send_telemetry.return_value = {"status": "success"}
+        mock_client_instance.send_telemetry.return_value = {
+            "status": "success"
+        }
         mock_client_instance.update_status.return_value = {"status": "success"}
         mock_client_instance.test_connection.return_value = True
 
@@ -221,7 +243,7 @@ def mock_device_agent_dependencies():
                 "MockClient": MockClient,
                 "mock_client_instance": mock_client_instance,
                 "mock_sleep": mock_sleep,
-                "fixed_now_iso": fixed_now.isoformat(), # Provide the fixed isoformat string for assertions
+                "fixed_now_iso": fixed_now.isoformat(),  # Provide the fixed isoformat string for assertions
             }
 
 
@@ -236,7 +258,9 @@ def test_secure_client_initialization_generates_keys(
     assert client.private_key is not None
     assert client.public_key_pem == MOCK_PUBLIC_KEY_PEM.strip()
     mock_crypto["mock_generate_private_key"].assert_called_once()
-    mock_crypto["mock_serialization"].load_pem_private_key.assert_not_called() # Updated mock assertion
+    mock_crypto[
+        "mock_serialization"
+    ].load_pem_private_key.assert_not_called()  # Updated mock assertion
 
 
 def test_secure_client_initialization_loads_keys(
@@ -249,42 +273,52 @@ def test_secure_client_initialization_loads_keys(
     # Mock crypto ensures a consistent public key PEM is returned when .public_bytes is called.
     assert client.public_key_pem == MOCK_PUBLIC_KEY_PEM.strip()
     mock_crypto["mock_generate_private_key"].assert_not_called()
-    mock_crypto["mock_serialization"].load_pem_private_key.assert_called_once() # Updated mock assertion
+    mock_crypto[
+        "mock_serialization"
+    ].load_pem_private_key.assert_called_once()  # Updated mock assertion
 
 
 def test_secure_client_make_request_success(
-    mock_httpx_client, secure_client_keys_exist # Changed fixture name
+    mock_httpx_client, secure_client_keys_exist  # Changed fixture name
 ):
     """Test _make_request for a successful response."""
     response_data = {"key": "value"}
-    mock_httpx_client.request.return_value.json.return_value = response_data # Changed mock_requests_session to mock_httpx_client
-    mock_httpx_client.request.return_value.status_code = 200 # Changed mock_requests_session to mock_httpx_client
+    mock_httpx_client.request.return_value.json.return_value = (
+        response_data  # Changed mock_requests_session to mock_httpx_client
+    )
+    mock_httpx_client.request.return_value.status_code = (
+        200  # Changed mock_requests_session to mock_httpx_client
+    )
 
     client = secure_client_keys_exist
     result = client.get("/test")
 
-    mock_httpx_client.request.assert_called_with( # Changed mock_requests_session to mock_httpx_client
+    mock_httpx_client.request.assert_called_with(  # Changed mock_requests_session to mock_httpx_client
         "GET", f"{TEST_BASE_URL}/test"
     )
     assert result == response_data
 
 
 def test_secure_client_make_request_http_error(
-    mock_httpx_client, secure_client_keys_exist # Changed fixture name
+    mock_httpx_client, secure_client_keys_exist  # Changed fixture name
 ):
     """Test _make_request handles HTTP errors."""
-    mock_httpx_client.request.return_value.status_code = 404 # Changed mock_requests_session to mock_httpx_client
-    mock_httpx_client.request.return_value.raise_for_status.side_effect = ( # Changed mock_requests_session to mock_httpx_client
-        httpx.HTTPStatusError("Not Found", request=httpx.Request("GET", "http://test.com"), response=httpx.Response(404)) # Changed exception type and added required args
+    mock_httpx_client.request.return_value.status_code = (
+        404  # Changed mock_requests_session to mock_httpx_client
     )
+    mock_httpx_client.request.return_value.raise_for_status.side_effect = httpx.HTTPStatusError(  # Changed mock_requests_session to mock_httpx_client
+        "Not Found",
+        request=httpx.Request("GET", "http://test.com"),
+        response=httpx.Response(404),
+    )  # Changed exception type and added required args
 
     client = secure_client_keys_exist
-    with pytest.raises(httpx.HTTPStatusError): # Changed exception type
+    with pytest.raises(httpx.HTTPStatusError):  # Changed exception type
         client.get("/nonexistent")
 
 
 def test_secure_client_register_device(
-    mock_httpx_client, secure_client_keys_exist # Changed fixture name
+    mock_httpx_client, secure_client_keys_exist  # Changed fixture name
 ):
     """Test register_device sends correct payload."""
     client = secure_client_keys_exist
@@ -301,27 +335,29 @@ def test_secure_client_register_device(
 
 
 def test_secure_client_health_check(
-    mock_httpx_client, secure_client_keys_exist # Changed fixture name
+    mock_httpx_client, secure_client_keys_exist  # Changed fixture name
 ):
     """Test health_check calls the correct endpoint."""
     client = secure_client_keys_exist
     client.health_check()
-    mock_httpx_client.request.assert_called_with( # Changed mock_requests_session to mock_httpx_client
+    mock_httpx_client.request.assert_called_with(  # Changed mock_requests_session to mock_httpx_client
         "GET", f"{TEST_BASE_URL}/health"
     )
 
 
 def test_secure_client_send_telemetry(
-    mock_httpx_client, secure_client_keys_exist # Changed fixture name
+    mock_httpx_client, secure_client_keys_exist  # Changed fixture name
 ):
     """Test send_telemetry sends correct payload."""
     client = secure_client_keys_exist
     test_data = {"temp": 25, "hum": 70}
-    with patch("equus_express.client.datetime") as mock_dt: # Removed src.
+    with patch("equus_express.client.datetime") as mock_dt:  # Removed src.
         mock_dt.now.return_value = datetime(
             2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc
         )
-        mock_dt.timezone = timezone  # Attach timezone for `timezone.utc` access
+        mock_dt.timezone = (
+            timezone  # Attach timezone for `timezone.utc` access
+        )
         client.send_telemetry(test_data)
     mock_httpx_client.request.assert_called_with(
         "POST",
@@ -336,28 +372,30 @@ def test_secure_client_send_telemetry(
 
 
 def test_secure_client_get_configuration(
-    mock_httpx_client, secure_client_keys_exist # Changed fixture name
+    mock_httpx_client, secure_client_keys_exist  # Changed fixture name
 ):
     """Test get_configuration calls the correct endpoint."""
     client = secure_client_keys_exist
     client.get_configuration()
-    mock_httpx_client.request.assert_called_with( # Changed mock_requests_session to mock_httpx_client
+    mock_httpx_client.request.assert_called_with(  # Changed mock_requests_session to mock_httpx_client
         "GET", f"{TEST_BASE_URL}/api/device/{TEST_DEVICE_ID}/config"
     )
 
 
 def test_secure_client_update_status(
-    mock_httpx_client, secure_client_keys_exist # Changed fixture name
+    mock_httpx_client, secure_client_keys_exist  # Changed fixture name
 ):
     """Test update_status sends correct payload."""
     client = secure_client_keys_exist
     test_status = "idle"
     test_details = {"battery": "90%"}
-    with patch("equus_express.client.datetime") as mock_dt: # Removed src.
+    with patch("equus_express.client.datetime") as mock_dt:  # Removed src.
         mock_dt.now.return_value = datetime(
             2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc
         )
-        mock_dt.timezone = timezone  # Attach timezone for `timezone.utc` access
+        mock_dt.timezone = (
+            timezone  # Attach timezone for `timezone.utc` access
+        )
         client.update_status(test_status, test_details)
     mock_httpx_client.request.assert_called_with(
         "POST",
@@ -373,7 +411,9 @@ def test_secure_client_update_status(
 
 
 def test_secure_client_test_connection_success(
-    mock_httpx_client, secure_client_keys_exist, mock_device_agent_dependencies # Added mock_device_agent_dependencies to ensure datetime is mocked
+    mock_httpx_client,
+    secure_client_keys_exist,
+    mock_device_agent_dependencies,  # Added mock_device_agent_dependencies to ensure datetime is mocked
 ):
     """Test test_connection success path."""
     client = secure_client_keys_exist
@@ -387,13 +427,17 @@ def test_secure_client_test_connection_success(
 
 
 def test_secure_client_test_connection_failure(
-    mock_httpx_client, secure_client_keys_exist, mock_device_agent_dependencies # Added mock_device_agent_dependencies to ensure datetime is mocked
+    mock_httpx_client,
+    secure_client_keys_exist,
+    mock_device_agent_dependencies,  # Added mock_device_agent_dependencies to ensure datetime is mocked
 ):
     """Test test_connection failure path."""
     client = secure_client_keys_exist
     # Make the mock raise a specific httpx error that test_connection catches
-    mock_httpx_client.request.return_value.json.side_effect = httpx.ConnectError(
-        "Connection failed", request=httpx.Request("GET", TEST_BASE_URL)
+    mock_httpx_client.request.return_value.json.side_effect = (
+        httpx.ConnectError(
+            "Connection failed", request=httpx.Request("GET", TEST_BASE_URL)
+        )
     )
     assert client.test_connection() is False
 
@@ -404,14 +448,16 @@ def test_secure_client_test_connection_failure(
 def test_device_agent_start_success(mock_device_agent_dependencies):
     """Test DeviceAgent starts successfully."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
-    fixed_now_iso = mock_device_agent_dependencies["fixed_now_iso"] # Get the fixed timestamp
+    fixed_now_iso = mock_device_agent_dependencies[
+        "fixed_now_iso"
+    ]  # Get the fixed timestamp
     agent = DeviceAgent(mock_client)
     assert agent.start() is True
     mock_client.test_connection.assert_called_once()
     mock_client.update_status.assert_called_with(
         "online",
         {
-            "startup_time": fixed_now_iso, # Use the fixed timestamp for assertion
+            "startup_time": fixed_now_iso,  # Use the fixed timestamp for assertion
             "version": "1.0",
         },
     )
@@ -424,19 +470,26 @@ def test_device_agent_start_failure(mock_device_agent_dependencies):
     mock_client.test_connection.return_value = False
     agent = DeviceAgent(mock_client)
     assert agent.start() is False
-    assert agent.running is False # This assertion was failing because agent.start() sets it to True initially. It should remain False if start() fails.
+    assert (
+        agent.running is False
+    )  # This assertion was failing because agent.start() sets it to True initially. It should remain False if start() fails.
 
 
 def test_device_agent_stop(mock_device_agent_dependencies):
     """Test DeviceAgent stops correctly and sends offline status."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
-    fixed_now_iso = mock_device_agent_dependencies["fixed_now_iso"] # Get the fixed timestamp
+    fixed_now_iso = mock_device_agent_dependencies[
+        "fixed_now_iso"
+    ]  # Get the fixed timestamp
     agent = DeviceAgent(mock_client)
     agent.running = True  # Manually set to running for stop test
     agent.stop()
     assert agent.running is False
     mock_client.update_status.assert_called_with(
-        "offline", {"shutdown_time": fixed_now_iso} # Use the fixed timestamp for assertion
+        "offline",
+        {
+            "shutdown_time": fixed_now_iso
+        },  # Use the fixed timestamp for assertion
     )
 
 

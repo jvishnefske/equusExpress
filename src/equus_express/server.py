@@ -15,10 +15,10 @@ from pydantic import BaseModel
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 import socket
-from contextlib import asynccontextmanager, ExitStack # Added ExitStack
-import importlib.resources as pkg_resources # New import for importlib.resources
-import tempfile # New import for temporary directory creation
-import shutil # New import for copying files
+from contextlib import asynccontextmanager, ExitStack  # Added ExitStack
+import importlib.resources as pkg_resources  # New import for importlib.resources
+import tempfile  # New import for temporary directory creation
+import shutil  # New import for copying files
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -46,35 +46,48 @@ async def lifespan(app: FastAPI):
     # Use ExitStack to manage the lifecycle of temporary resources (e.g., extracted static files)
     # This ensures cleanup on application shutdown.
     app.state.temp_resource_manager = ExitStack()
-    
+
     try:
         # Handle static files: they are now located INSIDE the 'equus_express' package.
         # We need to provide a file system path to StaticFiles.
         # If the package is zipped, importlib.resources.files will return a Traversable object
         # that doesn't point to a direct filesystem path. In this case, we extract to a temp dir.
-        
+
         # Create a temporary directory that will persist during the app's lifetime
         # and will be cleaned up by ExitStack on shutdown.
-        temp_static_dir = app.state.temp_resource_manager.enter_context(tempfile.TemporaryDirectory())
-        app.state.static_path = temp_static_dir # Default to temp dir for mounted path
+        temp_static_dir = app.state.temp_resource_manager.enter_context(
+            tempfile.TemporaryDirectory()
+        )
+        app.state.static_path = (
+            temp_static_dir  # Default to temp dir for mounted path
+        )
 
         # Get the Traversable object for the 'static' directory within the 'equus_express' package
-        source_static_dir_resource = pkg_resources.files('equus_express').joinpath('static')
-        
+        source_static_dir_resource = pkg_resources.files(
+            "equus_express"
+        ).joinpath("static")
+
         # Check if the resource directly points to a directory on the filesystem (e.g., in development mode)
         if source_static_dir_resource.is_dir():
             # If it's a real directory, just use its path directly
             app.state.static_path = str(source_static_dir_resource)
-            logger.info(f"Mounted static files directly from package directory: {app.state.static_path}")
+            logger.info(
+                f"Mounted static files directly from package directory: {app.state.static_path}"
+            )
         else:
             # The resource is likely inside a zip file, so we need to extract its contents
-            logger.info(f"Extracting static files from package to temporary directory: {temp_static_dir}")
+            logger.info(
+                f"Extracting static files from package to temporary directory: {temp_static_dir}"
+            )
             # Iterate over the contents of the 'static' resource directory and copy them
             # to the temporary directory.
             for item in source_static_dir_resource.iterdir():
                 with pkg_resources.as_file(item) as item_path_on_disk:
                     # item_path_on_disk is a concrete path to the extracted file
-                    shutil.copy(item_path_on_disk, os.path.join(temp_static_dir, item.name))
+                    shutil.copy(
+                        item_path_on_disk,
+                        os.path.join(temp_static_dir, item.name),
+                    )
             logger.info(f"Static files extracted to {app.state.static_path}")
 
     except Exception as e:
@@ -85,20 +98,20 @@ async def lifespan(app: FastAPI):
     # Mount the static directory using the path determined in the lifespan function
     app.mount(
         "/static",
-        StaticFiles(directory=app.state.static_path), # Use the dynamically determined path
+        StaticFiles(
+            directory=app.state.static_path
+        ),  # Use the dynamically determined path
         name="static",
     )
 
-    yield # This is where your application starts running and serves requests
-    
+    yield  # This is where your application starts running and serves requests
+
     logger.info("Application shutting down...")
-    app.state.temp_resource_manager.close() # This will clean up the temporary directory
+    app.state.temp_resource_manager.close()  # This will clean up the temporary directory
     logger.info("Temporary resources cleaned up.")
 
 
-app = FastAPI(
-    title="Secure IoT API Server", lifespan=lifespan
-)
+app = FastAPI(title="Secure IoT API Server", lifespan=lifespan)
 security = HTTPBearer()
 
 # Initialize Jinja2Templates (templates directory remains at the project root)
@@ -295,7 +308,9 @@ def get_authenticated_device_id(
     )
 
 
-def register_or_update_device(device_id: str, public_key: str, ip_address: str):
+def register_or_update_device(
+    device_id: str, public_key: str, ip_address: str
+):
     """Register or update device in the database with its public key"""
     try:
         db_file = os.getenv("SQLITE_DB_PATH", "secure_devices.db")
@@ -361,11 +376,15 @@ async def favicon():
     """
     try:
         # Locate favicon.ico within the 'static' folder inside the 'equus_express' package
-        favicon_resource_path = pkg_resources.files('equus_express').joinpath('static', 'favicon.ico')
-        
+        favicon_resource_path = pkg_resources.files("equus_express").joinpath(
+            "static", "favicon.ico"
+        )
+
         # Use pkg_resources.as_file() context manager to get a temporary filesystem path
         # to the resource, which can then be passed to FileResponse.
-        with pkg_resources.as_file(favicon_resource_path) as favicon_path_on_disk:
+        with pkg_resources.as_file(
+            favicon_resource_path
+        ) as favicon_path_on_disk:
             return FileResponse(str(favicon_path_on_disk))
     except Exception as e:
         logger.error(f"Failed to serve favicon.ico: {e}")
@@ -521,7 +540,9 @@ async def receive_telemetry(
 
     except Exception as e:
         logger.error(f"Failed to store telemetry: {e}")
-        raise HTTPException(status_code=500, detail="Failed to store telemetry")
+        raise HTTPException(
+            status_code=500, detail="Failed to store telemetry"
+        )
 
 
 @app.post("/api/device/status")

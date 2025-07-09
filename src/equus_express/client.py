@@ -4,8 +4,9 @@ Secure API Client with mTLS Authentication
 Uses provisioned certificates to authenticate with the secure server
 """
 
-import httpx # Changed from requests
+import httpx  # Changed from requests
 import ssl
+
 # Removed urllib3 and InsecureRequestWarning as httpx handles verify differently
 import json
 import logging
@@ -27,7 +28,9 @@ try:
     import psutil
 except ImportError:
     psutil = None
-    logger.warning("psutil not found. Some telemetry data might be unavailable.")
+    logger.warning(
+        "psutil not found. Some telemetry data might be unavailable."
+    )
 
 # Define default key storage directory
 DEFAULT_KEY_DIR = os.path.expanduser("~/.equus_express/keys")
@@ -62,31 +65,34 @@ class SecureAPIClient:
             logger.error(f"Error during key loading or generation: {e}")
             raise RuntimeError(f"Failed to initialize client keys: {e}") from e
 
-
         # Create httpx client
         self.client = httpx.Client(
             base_url=self.base_url,
             verify=True,
-            headers={ # Set default headers, including device ID for identification
+            headers={  # Set default headers, including device ID for identification
                 "User-Agent": f"SecureClient/{self.device_id}",
                 "Content-Type": "application/json",
-                "X-Device-Id": self.device_id, # Temporarily pass device_id in header for simplified auth
-            }
+                "X-Device-Id": self.device_id,  # Temporarily pass device_id in header for simplified auth
+            },
         )
 
         logger.info(f"Initialized client for device: {self.device_id}")
 
     def _load_or_generate_keys(self):
         """Load existing keys or generate new RSA key pair."""
-        os.makedirs(self.key_dir, exist_ok=True) # Ensure directory exists
+        os.makedirs(self.key_dir, exist_ok=True)  # Ensure directory exists
 
-        if os.path.exists(self._private_key_path) and os.path.exists(self._public_key_path):
+        if os.path.exists(self._private_key_path) and os.path.exists(
+            self._public_key_path
+        ):
             with open(self._private_key_path, "rb") as f:
                 self.private_key = serialization.load_pem_private_key(
                     f.read(), password=None, backend=default_backend()
                 )
             with open(self._public_key_path, "rb") as f:
-                self.public_key_pem = f.read().decode("utf-8").strip() # Strip newline here
+                self.public_key_pem = (
+                    f.read().decode("utf-8").strip()
+                )  # Strip newline here
             logger.info("Existing device keys loaded.")
         else:
             logger.info("Generating new device keys...")
@@ -105,7 +111,9 @@ class SecureAPIClient:
                 format=serialization.PublicFormat.SubjectPublicKeyInfo,
                 encryption_algorithm=serialization.NoEncryption(),
             )
-            self.public_key_pem = pem_public_key.decode("utf-8").strip() # Strip newline here
+            self.public_key_pem = pem_public_key.decode(
+                "utf-8"
+            ).strip()  # Strip newline here
 
             with open(self._private_key_path, "wb") as f:
                 f.write(pem_private_key)
@@ -121,7 +129,9 @@ class SecureAPIClient:
 
         try:
             logger.debug(f"Making {method} request to {url}")
-            response = self.client.request(method, url, **kwargs) # Changed self.session to self.client
+            response = self.client.request(
+                method, url, **kwargs
+            )  # Changed self.session to self.client
 
             # Log response status
             logger.debug(f"Response status: {response.status_code}")
@@ -139,7 +149,9 @@ class SecureAPIClient:
             logger.error(f"Connection error: {e}")
             raise ConnectionError(f"Failed to connect to server: {e}") from e
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error: {e.response.status_code} - {e.response.text}")
+            logger.error(
+                f"HTTP error: {e.response.status_code} - {e.response.text}"
+            )
             if e.response.status_code == 401:
                 raise PermissionError(
                     "Authentication failed - invalid client certificate"
@@ -149,7 +161,7 @@ class SecureAPIClient:
                     "Access denied - insufficient permissions"
                 ) from e
             else:
-                raise # Re-raise original httpx.HTTPStatusError
+                raise  # Re-raise original httpx.HTTPStatusError
         except httpx.RequestError as e:
             logger.error(f"Request failed: {e}")
             raise ConnectionError(f"Request to server failed: {e}") from e
@@ -191,8 +203,10 @@ class SecureAPIClient:
             logger.info(f"Device registration response: {response}")
             return response
         except (httpx.RequestError, ConnectionError, PermissionError) as e:
-            logger.error(f"Failed to register device due to network/server issue: {e}")
-            raise # Re-raise the specific exception
+            logger.error(
+                f"Failed to register device due to network/server issue: {e}"
+            )
+            raise  # Re-raise the specific exception
 
     def health_check(self):
         """Check server health"""
@@ -245,19 +259,27 @@ class SecureAPIClient:
             try:
                 device_info = self.get_device_info()
                 logger.info(f"Device info: {device_info}")
-            except (httpx.RequestError, ConnectionError, PermissionError) as e: # Catch specific exceptions here
+            except (
+                httpx.RequestError,
+                ConnectionError,
+                PermissionError,
+            ) as e:  # Catch specific exceptions here
                 logger.warning(
                     f"Device info endpoint failed (this might be expected if server requires stronger auth post-registration): {e}"
                 )
                 # This is a warning, so we continue and still return True if other steps succeeded.
-
 
             logger.info(
                 "✅ Connection test and initial registration step completed!"
             )
             return True
 
-        except (httpx.RequestError, ConnectionError, PermissionError, RuntimeError) as e:
+        except (
+            httpx.RequestError,
+            ConnectionError,
+            PermissionError,
+            RuntimeError,
+        ) as e:
             logger.error(f"❌ Connection test or registration failed: {e}")
             return False
 
@@ -276,7 +298,7 @@ class DeviceAgent:
         # Perform connection test and registration
         if not self.client.test_connection():
             logger.error("Failed initial connection and registration.")
-            self.running = False # Explicitly set to False on failure
+            self.running = False  # Explicitly set to False on failure
             return False
 
         # If connection is successful, set running to True
@@ -331,14 +353,25 @@ class DeviceAgent:
             except KeyboardInterrupt:
                 logger.info("Telemetry loop interrupted by user")
                 break
-            except (httpx.RequestError, ConnectionError, PermissionError, json.JSONDecodeError, TypeError) as e:
+            except (
+                httpx.RequestError,
+                ConnectionError,
+                PermissionError,
+                json.JSONDecodeError,
+                TypeError,
+            ) as e:
                 # Catch specific client communication errors or data formatting issues
-                logger.error(f"Telemetry loop communication or data error: {e}")
+                logger.error(
+                    f"Telemetry loop communication or data error: {e}"
+                )
                 time.sleep(interval)  # Wait before retrying
-            except Exception as e: # Fallback for any other unexpected errors in the loop
-                logger.exception(f"An unexpected error occurred in telemetry loop: {e}") # Use exception for full traceback
+            except (
+                Exception
+            ) as e:  # Fallback for any other unexpected errors in the loop
+                logger.exception(
+                    f"An unexpected error occurred in telemetry loop: {e}"
+                )  # Use exception for full traceback
                 time.sleep(interval)
-
 
     def _collect_telemetry(self) -> dict:
         """Collect telemetry data from the device"""
@@ -390,7 +423,9 @@ class DeviceAgent:
 
         if errors:
             telemetry["application"]["last_error"] = "; ".join(errors)
-            logger.warning(f"Partial telemetry collection errors: {telemetry['application']['last_error']}")
+            logger.warning(
+                f"Partial telemetry collection errors: {telemetry['application']['last_error']}"
+            )
 
         return telemetry
 
@@ -401,7 +436,7 @@ class DeviceAgent:
                 return float(f.readline().split()[0])
         except OSError as e:
             logger.warning(f"Failed to get uptime: {e}")
-            raise # Re-raise for _collect_telemetry to catch and report
+            raise  # Re-raise for _collect_telemetry to catch and report
 
     def _get_cpu_usage(self) -> float:
         """Get CPU usage percentage"""
@@ -410,11 +445,10 @@ class DeviceAgent:
                 return psutil.cpu_percent(interval=1)
             except psutil.Error as e:
                 logger.warning(f"psutil CPU usage error: {e}")
-                raise # Re-raise for _collect_telemetry to catch and report
+                raise  # Re-raise for _collect_telemetry to catch and report
         else:
             logger.debug("psutil not available for CPU usage.")
             raise NotImplementedError("psutil library is not available.")
-
 
     def _get_memory_usage(self) -> dict:
         """Get memory usage information"""
@@ -469,9 +503,12 @@ class DeviceAgent:
             ip = s.getsockname()[0]
             s.close()
             return ip
-        except (socket.error, OSError) as e: # Catch specific socket and OS errors
+        except (
+            socket.error,
+            OSError,
+        ) as e:  # Catch specific socket and OS errors
             logger.warning(f"Failed to get IP address: {e}")
-            raise # Re-raise for _collect_telemetry to catch and report
+            raise  # Re-raise for _collect_telemetry to catch and report
 
 
 def main():
@@ -479,7 +516,9 @@ def main():
     import sys
 
     if len(sys.argv) < 2:
-        print("Usage: python3 secure_client.py <secure_server_url> [device_id]")
+        print(
+            "Usage: python3 secure_client.py <secure_server_url> [device_id]"
+        )
         print("Example: python3 secure_client.py https://secure-server:8443")
         sys.exit(1)
 
@@ -504,8 +543,12 @@ def main():
                 agent.run_telemetry_loop(interval=30)  # 30 second intervals
             except KeyboardInterrupt:
                 logger.info("Telemetry loop stopped by user.")
-            except Exception as e: # Catch any unhandled errors in telemetry loop
-                logger.critical(f"Unhandled error in telemetry loop, agent stopping: {e}")
+            except (
+                Exception
+            ) as e:  # Catch any unhandled errors in telemetry loop
+                logger.critical(
+                    f"Unhandled error in telemetry loop, agent stopping: {e}"
+                )
             finally:
                 agent.stop()
         else:
@@ -516,7 +559,9 @@ def main():
         logger.error(f"A critical client error occurred: {e}")
         sys.exit(1)
     except Exception as e:
-        logger.exception(f"An unexpected error occurred in the main client process: {e}") # Use exception for full traceback
+        logger.exception(
+            f"An unexpected error occurred in the main client process: {e}"
+        )  # Use exception for full traceback
         sys.exit(1)
 
 
