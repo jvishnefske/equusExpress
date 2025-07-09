@@ -284,27 +284,20 @@ def init_secure_db():
 # based on the client's public key (e.g., signed JWTs or request bodies).
 # For now, we will rely on device_id being passed in the payload for certain endpoints,
 # and introduce a registration endpoint.
-def get_authenticated_device_id(
-    request: Request, device_id: Optional[str] = None
-) -> str:
+def get_authenticated_device_id(request: Request) -> str:
     """
     Placeholder: Authenticates the client and returns their device ID.
+    For now, this relies solely on the 'X-Device-Id' header.
     In a real system, this would verify a signature or token.
-    For initial registration, this might not be called, or it might accept a temporary token.
     """
-    # For now, we'll rely on the device_id passed in the body or path for non-registration endpoints.
-    # This needs robust implementation for production (e.g., validating a signed payload or token).
-    if device_id:
-        return device_id
-    # Attempt to get device_id from headers for initial compatibility or simple tests
     header_device_id = request.headers.get("X-Device-Id")
     if header_device_id:
         return header_device_id
 
-    # If no device_id can be determined for an authenticated endpoint, raise an error
+    # If no device_id can be determined from the header for an authenticated endpoint, raise an error
     raise HTTPException(
         status_code=401,
-        detail="Authentication required: Device ID not provided or authenticated.",
+        detail="Authentication required: 'X-Device-Id' header not provided or authenticated.",
     )
 
 

@@ -134,12 +134,12 @@ def test_get_authenticated_device_id_missing_header():
 def test_register_device_missing_fields():
     """Test device registration with missing device_id or public_key."""
     response = client.post("/api/register", json={"public_key": TEST_PUBLIC_KEY})
-    assert response.status_code == 400
-    assert "Device ID and public key are required" in response.json()["detail"]
+    assert response.status_code == 422 # Pydantic validation error
+    assert "value_error.missing" in response.json()["detail"][0]["type"]
 
     response = client.post("/api/register", json={"device_id": TEST_DEVICE_ID})
-    assert response.status_code == 400
-    assert "Device ID and public key are required" in response.json()["detail"]
+    assert response.status_code == 422 # Pydantic validation error
+    assert "value_error.missing" in response.json()["detail"][0]["type"]
 
 
 def test_receive_telemetry_device_id_mismatch():
