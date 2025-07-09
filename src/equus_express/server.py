@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.security import HTTPBearer
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates # New import
+from fastapi.templating import Jinja2Templates  # New import
 import uvicorn
 import ssl
 import os
@@ -15,11 +15,12 @@ from pydantic import BaseModel
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 import socket
-from contextlib import asynccontextmanager # New import
+from contextlib import asynccontextmanager  # New import
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -32,14 +33,23 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Application shutting down...")
 
-app = FastAPI(title="Secure IoT API Server", lifespan=lifespan) # Updated FastAPI init
+
+app = FastAPI(
+    title="Secure IoT API Server", lifespan=lifespan
+)  # Updated FastAPI init
 security = HTTPBearer()
 
 # Initialize Jinja2Templates
-templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
+templates = Jinja2Templates(
+    directory=os.path.join(os.path.dirname(__file__), "templates")
+)
 
 # Mount a static directory to serve files like favicon.ico
-app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
+app.mount(
+    "/static",
+    StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")),
+    name="static",
+)
 
 
 # Data models
@@ -60,19 +70,22 @@ class DeviceConfig(BaseModel):
     device_id: str
     config: Dict[str, Any]
 
+
 class PublicKeyRegistration(BaseModel):
     device_id: str
     public_key: str
 
+
 # Database initialization
 def init_secure_db():
     """Initialize the secure database for device management"""
-    db_file = os.getenv("SQLITE_DB_PATH", 'secure_devices.db')
+    db_file = os.getenv("SQLITE_DB_PATH", "secure_devices.db")
     conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
 
     # Devices table
-    cursor.execute('''
+    cursor.execute(
+        """
                    CREATE TABLE IF NOT EXISTS devices
                    (
                        device_id
@@ -98,10 +111,12 @@ def init_secure_db():
                        device_info
                        TEXT
                    )
-                   ''')
+                   """
+    )
 
     # Telemetry table
-    cursor.execute('''
+    cursor.execute(
+        """
                    CREATE TABLE IF NOT EXISTS telemetry
                    (
                        id
@@ -128,10 +143,12 @@ def init_secure_db():
                        device_id
                    )
                        )
-                   ''')
+                   """
+    )
 
     # Device status table
-    cursor.execute('''
+    cursor.execute(
+        """
                    CREATE TABLE IF NOT EXISTS device_status
                    (
                        id
@@ -160,10 +177,12 @@ def init_secure_db():
                        device_id
                    )
                        )
-                   ''')
+                   """
+    )
 
     # Device configuration table
-    cursor.execute('''
+    cursor.execute(
+        """
                    CREATE TABLE IF NOT EXISTS device_config
                    (
                        device_id
@@ -185,7 +204,8 @@ def init_secure_db():
                        device_id
                    )
                        )
-                   ''')
+                   """
+    )
 
     conn.commit()
     conn.close()
@@ -196,7 +216,9 @@ def init_secure_db():
 # based on the client's public key (e.g., signed JWTs or request bodies).
 # For now, we will rely on device_id being passed in the payload for certain endpoints,
 # and introduce a registration endpoint.
-def get_authenticated_device_id(request: Request, device_id: Optional[str] = None) -> str:
+def get_authenticated_device_id(
+    request: Request, device_id: Optional[str] = None
+) -> str:
     """
     Placeholder: Authenticates the client and returns their device ID.
     In a real system, this would verify a signature or token.
@@ -210,38 +232,49 @@ def get_authenticated_device_id(request: Request, device_id: Optional[str] = Non
     header_device_id = request.headers.get("X-Device-Id")
     if header_device_id:
         return header_device_id
-    
+
     # If no device_id can be determined for an authenticated endpoint, raise an error
-    raise HTTPException(status_code=401, detail="Authentication required: Device ID not provided or authenticated.")
+    raise HTTPException(
+        status_code=401,
+        detail="Authentication required: Device ID not provided or authenticated.",
+    )
 
 
 def register_or_update_device(device_id: str, public_key: str, ip_address: str):
     """Register or update device in the database with its public key"""
     try:
-        db_file = os.getenv("SQLITE_DB_PATH", 'secure_devices.db')
+        db_file = os.getenv("SQLITE_DB_PATH", "secure_devices.db")
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
 
         # Check if device exists
-        cursor.execute("SELECT device_id FROM devices WHERE device_id = ?", (device_id,))
+        cursor.execute(
+            "SELECT device_id FROM devices WHERE device_id = ?", (device_id,)
+        )
         exists = cursor.fetchone()
 
         if exists:
             # Update existing device's public key and last seen
-            cursor.execute('''
+            cursor.execute(
+                """
                            UPDATE devices
                            SET last_seen  = CURRENT_TIMESTAMP,
                                public_key = ?,
                                ip_address = ?
                            WHERE device_id = ?
-                           ''', (public_key, ip_address, device_id))
+                           """,
+                (public_key, ip_address, device_id),
+            )
         else:
             # Insert new device with public key
-            cursor.execute('''
+            cursor.execute(
+                """
                            INSERT INTO devices
                                (device_id, public_key, ip_address)
                            VALUES (?, ?, ?)
-                           ''', (device_id, public_key, ip_address))
+                           """,
+                (device_id, public_key, ip_address),
+            )
 
         conn.commit()
         conn.close()
@@ -259,12 +292,16 @@ async def root(request: Request):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     return FileResponse("static/favicon.ico")
+
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
@@ -376,7 +413,9 @@ async def dashboard():
 
 
 @app.post("/api/register")
-async def register_device(registration_data: PublicKeyRegistration, request: Request):
+async def register_device(
+    registration_data: PublicKeyRegistration, request: Request
+):
     """
     Register a new device with its public key.
     This endpoint is designed to be initially unauthenticated for onboarding.
@@ -386,33 +425,48 @@ async def register_device(registration_data: PublicKeyRegistration, request: Req
     client_ip = request.client.host
 
     if not device_id or not public_key:
-        raise HTTPException(status_code=400, detail="Device ID and public key are required for registration.")
+        raise HTTPException(
+            status_code=400,
+            detail="Device ID and public key are required for registration.",
+        )
 
     try:
         register_or_update_device(device_id, public_key, client_ip)
-        logger.info(f"Device '{device_id}' successfully registered/updated from IP: {client_ip}")
-        return {"status": "success", "message": "Device registered successfully."}
+        logger.info(
+            f"Device '{device_id}' successfully registered/updated from IP: {client_ip}"
+        )
+        return {
+            "status": "success",
+            "message": "Device registered successfully.",
+        }
     except Exception as e:
         logger.error(f"Error during device registration for {device_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to register device: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to register device: {e}"
+        )
 
 
 @app.get("/api/device/info")
-async def get_device_info(request: Request, device_id: str = Depends(get_authenticated_device_id)):
+async def get_device_info(
+    request: Request, device_id: str = Depends(get_authenticated_device_id)
+):
     """Get device information"""
     # For now, device_id is expected to be passed via query param or headers,
     # or determined by a future authentication mechanism.
     # The Depends(get_authenticated_device_id) indicates this endpoint requires authentication.
 
     try:
-        db_file = os.getenv("SQLITE_DB_PATH", 'secure_devices.db')
+        db_file = os.getenv("SQLITE_DB_PATH", "secure_devices.db")
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
                        SELECT device_id, first_seen, last_seen, status, ip_address
                        FROM devices
                        WHERE device_id = ?
-                       ''', (device_id,))
+                       """,
+            (device_id,),
+        )
         device_data = cursor.fetchone()
         conn.close()
 
@@ -423,43 +477,59 @@ async def get_device_info(request: Request, device_id: str = Depends(get_authent
                 "last_seen": device_data[2],
                 "status": device_data[3],
                 "ip_address": device_data[4],
-                "certificate_valid": True
+                "certificate_valid": True,
             }
         else:
             return {"error": "Device not found"}
 
     except Exception as e:
         logger.error(f"Failed to get device info: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve device info")
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve device info"
+        )
 
 
 @app.post("/api/telemetry")
-async def receive_telemetry(telemetry: TelemetryData, request: Request,
-                            authenticated_device_id: str = Depends(get_authenticated_device_id)):
+async def receive_telemetry(
+    telemetry: TelemetryData,
+    request: Request,
+    authenticated_device_id: str = Depends(get_authenticated_device_id),
+):
     """Receive telemetry data from devices"""
     # Verify device_id in payload matches authenticated device ID
     if telemetry.device_id != authenticated_device_id:
-        raise HTTPException(status_code=403, detail="Device ID in payload does not match authenticated device.")
-    device_id = telemetry.device_id # Use the ID from the payload after authentication check
+        raise HTTPException(
+            status_code=403,
+            detail="Device ID in payload does not match authenticated device.",
+        )
+    device_id = (
+        telemetry.device_id
+    )  # Use the ID from the payload after authentication check
 
     try:
-        db_file = os.getenv("SQLITE_DB_PATH", 'secure_devices.db')
+        db_file = os.getenv("SQLITE_DB_PATH", "secure_devices.db")
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
 
         # Store telemetry data
-        cursor.execute('''
+        cursor.execute(
+            """
                        INSERT INTO telemetry (device_id, timestamp, data)
                        VALUES (?, ?, ?)
-                       ''', (device_id, telemetry.timestamp, json.dumps(telemetry.data)))
+                       """,
+            (device_id, telemetry.timestamp, json.dumps(telemetry.data)),
+        )
 
         # Update device last seen
-        cursor.execute('''
+        cursor.execute(
+            """
                        UPDATE devices
                        SET last_seen = CURRENT_TIMESTAMP,
                            status    = 'online'
                        WHERE device_id = ?
-                       ''', (device_id,))
+                       """,
+            (device_id,),
+        )
 
         conn.commit()
         conn.close()
@@ -473,33 +543,55 @@ async def receive_telemetry(telemetry: TelemetryData, request: Request,
 
 
 @app.post("/api/device/status")
-async def update_device_status(status_update: StatusUpdate, request: Request,
-                               authenticated_device_id: str = Depends(get_authenticated_device_id)):
+async def update_device_status(
+    status_update: StatusUpdate,
+    request: Request,
+    authenticated_device_id: str = Depends(get_authenticated_device_id),
+):
     """Update device status"""
     # Verify device_id in payload matches authenticated device ID
     if status_update.device_id != authenticated_device_id:
-        raise HTTPException(status_code=403, detail="Device ID in payload does not match authenticated device.")
-    device_id = status_update.device_id # Use the ID from the payload after authentication check
+        raise HTTPException(
+            status_code=403,
+            detail="Device ID in payload does not match authenticated device.",
+        )
+    device_id = (
+        status_update.device_id
+    )  # Use the ID from the payload after authentication check
 
     try:
-        db_file = os.getenv("SQLITE_DB_PATH", 'secure_devices.db')
+        db_file = os.getenv("SQLITE_DB_PATH", "secure_devices.db")
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
 
         # Store status update
-        cursor.execute('''
+        cursor.execute(
+            """
                        INSERT INTO device_status (device_id, status, timestamp, details)
                        VALUES (?, ?, ?, ?)
-                       ''', (device_id, status_update.status, status_update.timestamp,
-                             json.dumps(status_update.details) if status_update.details else None))
+                       """,
+            (
+                device_id,
+                status_update.status,
+                status_update.timestamp,
+                (
+                    json.dumps(status_update.details)
+                    if status_update.details
+                    else None
+                ),
+            ),
+        )
 
         # Update device status
-        cursor.execute('''
+        cursor.execute(
+            """
                        UPDATE devices
                        SET status    = ?,
                            last_seen = CURRENT_TIMESTAMP
                        WHERE device_id = ?
-                       ''', (status_update.status, device_id))
+                       """,
+            (status_update.status, device_id),
+        )
 
         conn.commit()
         conn.close()
@@ -513,22 +605,30 @@ async def update_device_status(status_update: StatusUpdate, request: Request,
 
 
 @app.get("/api/device/{device_id}/config")
-async def get_device_config(device_id: str, request: Request,
-                            authenticated_device_id: str = Depends(get_authenticated_device_id)):
+async def get_device_config(
+    device_id: str,
+    request: Request,
+    authenticated_device_id: str = Depends(get_authenticated_device_id),
+):
     """Get device configuration"""
     # Verify device_id in path matches authenticated device ID
     if device_id != authenticated_device_id:
-        raise HTTPException(status_code=403, detail="Access denied: Device ID mismatch.")
+        raise HTTPException(
+            status_code=403, detail="Access denied: Device ID mismatch."
+        )
 
     try:
-        db_file = os.getenv("SQLITE_DB_PATH", 'secure_devices.db')
+        db_file = os.getenv("SQLITE_DB_PATH", "secure_devices.db")
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
                        SELECT config
                        FROM device_config
                        WHERE device_id = ?
-                       ''', (device_id,))
+                       """,
+            (device_id,),
+        )
         result = cursor.fetchone()
         conn.close()
 
@@ -543,28 +643,32 @@ async def get_device_config(device_id: str, request: Request,
                 "features": {
                     "telemetry_enabled": True,
                     "remote_control": False,
-                    "auto_update": True
-                }
+                    "auto_update": True,
+                },
             }
             return {"device_id": device_id, "config": default_config}
 
     except Exception as e:
         logger.error(f"Failed to get device config: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve configuration")
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve configuration"
+        )
 
 
 @app.get("/api/admin/devices")
 async def list_devices():
     """List all devices (admin endpoint)"""
     try:
-        db_file = os.getenv("SQLITE_DB_PATH", 'secure_devices.db')
+        db_file = os.getenv("SQLITE_DB_PATH", "secure_devices.db")
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
                        SELECT device_id, first_seen, last_seen, status, ip_address
                        FROM devices
                        ORDER BY last_seen DESC
-                       ''')
+                       """
+        )
         devices = cursor.fetchall()
         conn.close()
 
@@ -575,7 +679,7 @@ async def list_devices():
                     "first_seen": device[1],
                     "last_seen": device[2],
                     "status": device[3],
-                    "ip_address": device[4]
+                    "ip_address": device[4],
                 }
                 for device in devices
             ]
@@ -590,15 +694,18 @@ async def list_devices():
 async def get_device_telemetry(device_id: str, limit: int = 100):
     """Get telemetry data for a specific device (admin endpoint)"""
     try:
-        db_file = os.getenv("SQLITE_DB_PATH", 'secure_devices.db')
+        db_file = os.getenv("SQLITE_DB_PATH", "secure_devices.db")
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
                        SELECT timestamp, data, received_at
                        FROM telemetry
                        WHERE device_id = ?
                        ORDER BY received_at DESC LIMIT ?
-                       ''', (device_id, limit))
+                       """,
+            (device_id, limit),
+        )
         telemetry = cursor.fetchall()
         conn.close()
 
@@ -608,15 +715,17 @@ async def get_device_telemetry(device_id: str, limit: int = 100):
                 {
                     "timestamp": row[0],
                     "data": json.loads(row[1]),
-                    "received_at": row[2]
+                    "received_at": row[2],
                 }
                 for row in telemetry
-            ]
+            ],
         }
 
     except Exception as e:
         logger.error(f"Failed to get telemetry: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve telemetry")
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve telemetry"
+        )
 
 
 if __name__ == "__main__":
@@ -626,5 +735,5 @@ if __name__ == "__main__":
         app,
         host="0.0.0.0",
         port=8000,  # Changed to a standard HTTP port
-        log_level="info"
+        log_level="info",
     )
