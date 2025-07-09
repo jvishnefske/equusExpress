@@ -301,9 +301,7 @@ def get_authenticated_device_id(request: Request) -> str:
     )
 
 
-def register_or_update_device(
-    device_id: str, public_key: str, ip_address: str
-):
+def register_or_update_device(device_id: str, public_key: str, ip_address: str):
     """Register or update device in the database with its public key"""
     try:
         db_file = os.getenv("SQLITE_DB_PATH", "secure_devices.db")
@@ -533,9 +531,7 @@ async def receive_telemetry(
 
     except Exception as e:
         logger.error(f"Failed to store telemetry: {e}")
-        raise HTTPException(
-            status_code=500, detail="Failed to store telemetry"
-        )
+        raise HTTPException(status_code=500, detail="Failed to store telemetry")
 
 
 @app.post("/api/device/status")
