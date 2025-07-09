@@ -4,7 +4,8 @@ This is a placeholder repository for a generic application. It serves as a start
 
 ## Badges
 
-[![GitHub Actions status](https://github.com/jvishnefske/equus_express/workflows/CI/badge.svg)](https://github.com/jvishnefske/equus_express/actions)
+[![Docker](https://github.com/jvishnefske/equusExpress/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/jvishnefske/equusExpress/actions/workflows/docker-publish.yml)
+[![Docker](https://github.com/jvishnefske/equusExpress/actions/workflows/build.yml/badge.svg)](https://github.com/jvishnefske/equusExpress/actions/workflows/build.yml)
 [![SonarCloud Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=jvishnefske_equus_express&metric=alert_status)](https://sonarcloud.io/dashboard?id=jvishnefske_equus_express)
 
 ## Getting Started
