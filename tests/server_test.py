@@ -3,7 +3,7 @@ import sqlite3
 import pytest
 from fastapi.testclient import TestClient
 from equus_express.server import app, init_secure_db
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Initialize the TestClient
 client = TestClient(app)
@@ -87,7 +87,7 @@ def test_send_telemetry():
 
     telemetry_data = {
         "device_id": TEST_DEVICE_ID,
-        "timestamp": datetime.now(datetime.UTC).isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "data": {"temp": 25.5, "humidity": 60},
     }
     response = client.post(
@@ -118,7 +118,7 @@ def test_update_device_status():
     status_data = {
         "device_id": TEST_DEVICE_ID,
         "status": "active",
-        "timestamp": datetime.now(datetime.UTC).isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "details": {"battery": "80%"}
     }
     response = client.post(
@@ -186,7 +186,7 @@ def test_get_device_telemetry():
     client.post("/api/register", json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY})
     telemetry_data = {
         "device_id": TEST_DEVICE_ID,
-        "timestamp": datetime.now(datetime.UTC).isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "data": {"temp": 25.5, "humidity": 60},
     }
     client.post("/api/telemetry", json=telemetry_data, headers={"X-Device-Id": TEST_DEVICE_ID})

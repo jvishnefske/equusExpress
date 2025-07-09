@@ -8,7 +8,7 @@ import ssl
 import os
 import sqlite3
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 import logging
 from pydantic import BaseModel
@@ -252,7 +252,7 @@ async def root(request: Request):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "timestamp": datetime.now(datetime.UTC).isoformat()}
+    return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @app.get("/favicon.ico", include_in_schema=False)
