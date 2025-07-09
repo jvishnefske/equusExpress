@@ -226,11 +226,11 @@ def mock_device_agent_dependencies():
             ),
             patch(
                 "equus_express.client.DeviceAgent._get_memory_usage",
-                return_value={"total": 1000, "percent": 50},
+                return_value={"total": 1000, "percent": 50.0}, # Changed to float
             ),
             patch(
                 "equus_express.client.DeviceAgent._get_disk_usage",
-                return_value={"total": 1000, "percent": 70},
+                return_value={"total": 1000, "percent": 70.0}, # Changed to float
             ),
             patch(
                 "equus_express.client.DeviceAgent._get_temperature",
