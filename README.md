@@ -11,6 +11,7 @@ This is a placeholder repository for a generic application. It serves as a start
 [![SonarCloud Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=jvishnefske_equusExpress&metric=ncloc)](https://sonarcloud.io/dashboard?id=jvishnefske_equusExpress)
 [![SonarCloud Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=jvishnefske_equusExpress&metric=vulnerabilities)](https://sonarcloud.io/dashboard?id=jvishnefske_equusExpress)
 
+
 ## Getting Started
 
 More details will be added here as the project evolves.
