@@ -18,6 +18,7 @@ MOCK_PUBLIC_KEY_PEM = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCA
 MOCK_PRIVATE_KEY_PEM = (
     b"-----BEGIN PRIVATE KEY-----MOCK_PRIVATE_KEY-----END PRIVATE KEY-----"
 )
+MOCK_IP_ADDRESS = "192.168.1.100" # New constant for mock IP address
 
 
 @pytest.fixture
@@ -235,7 +236,7 @@ def mock_device_agent_dependencies():
             ),
             patch(
                 "equus_express.client.DeviceAgent._get_ip_address",
-                return_value="192.168.1.100",
+                return_value=MOCK_IP_ADDRESS, # Use the constant here
             ),
         ):
 
@@ -538,7 +539,7 @@ def test_device_agent_collect_telemetry(mock_device_agent_dependencies):
     assert telemetry["system"]["memory_usage"]["percent"] == 50
     assert telemetry["system"]["disk_usage"]["percent"] == 70
     assert telemetry["system"]["temperature"] == 45.0
-    assert telemetry["network"]["ip_address"] == "192.168.1.100"
+    assert telemetry["network"]["ip_address"] == MOCK_IP_ADDRESS # Use the constant here
 
 
 def test_device_agent_collect_telemetry_error_handling(
