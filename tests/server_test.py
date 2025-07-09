@@ -2,9 +2,10 @@ import os
 import sqlite3
 import pytest
 from fastapi.testclient import TestClient
-from equus_express.server import app, init_secure_db
+from equus_express.server import app, init_secure_db, lifespan # Import lifespan
+from fastapi import FastAPI # Import FastAPI to create new app instances
 from datetime import datetime, timezone
-from unittest.mock import patch # Added patch import
+from unittest.mock import patch
 
 # Initialize the TestClient
 client = TestClient(app)
@@ -460,10 +461,12 @@ def test_favicon_not_found():
 
 def test_lifespan_static_file_setup_error():
     """Test lifespan context manager handles errors during static file setup."""
+    # Create a new FastAPI app instance specifically for this test
+    # This ensures a fresh lifespan context is triggered with the TestClient.
+    temp_app = FastAPI(lifespan=lifespan)
+
     # Mock tempfile.TemporaryDirectory to raise an error
     with patch("equus_express.server.tempfile.TemporaryDirectory", side_effect=OSError("Temp dir error")):
         with pytest.raises(RuntimeError, match="Failed to initialize static file serving"):
-            # Create a new TestClient instance to trigger the lifespan context with the mock
-            # This instance will fail during its initialization due to the mocked error.
-            TestClient(app)
-    # No need to restore app.router.lifespan_context as the module-level client is not affected.
+            # Create a new TestClient instance for the temporary app
+            TestClient(temp_app)
