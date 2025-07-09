@@ -391,8 +391,9 @@ def test_secure_client_test_connection_failure(
 ):
     """Test test_connection failure path."""
     client = secure_client_keys_exist
-    mock_httpx_client.request.return_value.json.side_effect = Exception(
-        "Connection failed"
+    # Make the mock raise a specific httpx error that test_connection catches
+    mock_httpx_client.request.return_value.json.side_effect = httpx.ConnectError(
+        "Connection failed", request=httpx.Request("GET", TEST_BASE_URL)
     )
     assert client.test_connection() is False
 
@@ -496,11 +497,13 @@ def test_device_agent_collect_telemetry_error_handling(
 
     # Make _get_uptime raise an error
     with patch(
-        "equus_express.client.DeviceAgent._get_uptime", # Removed src.
+        "equus_express.client.DeviceAgent._get_uptime",
         side_effect=Exception("Uptime error"),
     ):
         telemetry = agent._collect_telemetry()
-        assert (
-            "error" in telemetry
-        )  # The _collect_telemetry catches and returns error string
-        assert "Uptime error" in telemetry["error"]
+        # The _collect_telemetry catches helper errors and puts them in 'application.last_error'
+        assert "application" in telemetry
+        assert "last_error" in telemetry["application"]
+        assert "uptime: Uptime error" in telemetry["application"]["last_error"]
+        # Also assert that the uptime field itself is marked as an error
+        assert telemetry["system"]["uptime"] == "error"

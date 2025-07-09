@@ -49,7 +49,6 @@ jobs:
         run: |
           python3 -m pip install -e .[dev]
           python3 -m pip install pytest coverage pytest-cov
-          # need to remove this line when project is converted to server daemon
           coverage run -m pytest
           coverage report
           coverage xml
