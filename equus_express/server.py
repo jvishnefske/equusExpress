@@ -39,6 +39,9 @@ class DeviceConfig(BaseModel):
     device_id: str
     config: Dict[str, Any]
 
+class PublicKeyRegistration(BaseModel):
+    device_id: str
+    public_key: str
 
 # Database initialization
 def init_secure_db():
@@ -54,9 +57,7 @@ def init_secure_db():
                        TEXT
                        PRIMARY
                        KEY,
-                       certificate_serial
-                       TEXT,
-                       certificate_subject
+                       public_key
                        TEXT,
                        first_seen
                        TIMESTAMP
@@ -168,56 +169,32 @@ def init_secure_db():
     conn.close()
 
 
-def get_client_cert_info(request: Request) -> dict:
-    """Extract client certificate information from the request"""
-    try:
-        # In a real implementation, this would extract cert info from the TLS handshake
-        # For demonstration, we'll simulate this
-        client_cert = request.scope.get('client_cert')
-        if not client_cert:
-            # Try to get from headers (for testing)
-            cert_header = request.headers.get('X-Client-Cert')
-            if cert_header:
-                # Parse certificate from header (base64 encoded)
-                import base64
-                cert_data = base64.b64decode(cert_header)
-                cert = x509.load_pem_x509_certificate(cert_data)
-
-                return {
-                    "serial_number": str(cert.serial_number),
-                    "subject": str(cert.subject),
-                    "issuer": str(cert.issuer),
-                    "not_before": cert.not_valid_before.isoformat(),
-                    "not_after": cert.not_valid_after.isoformat()
-                }
-            else:
-                raise HTTPException(status_code=401, detail="Client certificate required")
-
-        return client_cert
-    except Exception as e:
-        logger.error(f"Certificate validation error: {e}")
-        raise HTTPException(status_code=401, detail="Invalid client certificate")
+# Placeholder for future authentication and device identification logic.
+# This function will need to be replaced with logic that validates incoming requests
+# based on the client's public key (e.g., signed JWTs or request bodies).
+# For now, we will rely on device_id being passed in the payload for certain endpoints,
+# and introduce a registration endpoint.
+def get_authenticated_device_id(request: Request, device_id: Optional[str] = None) -> str:
+    """
+    Placeholder: Authenticates the client and returns their device ID.
+    In a real system, this would verify a signature or token.
+    For initial registration, this might not be called, or it might accept a temporary token.
+    """
+    # For now, we'll rely on the device_id passed in the body or path for non-registration endpoints.
+    # This needs robust implementation for production (e.g., validating a signed payload or token).
+    if device_id:
+        return device_id
+    # Attempt to get device_id from headers for initial compatibility or simple tests
+    header_device_id = request.headers.get("X-Device-Id")
+    if header_device_id:
+        return header_device_id
+    
+    # If no device_id can be determined for an authenticated endpoint, raise an error
+    raise HTTPException(status_code=401, detail="Authentication required: Device ID not provided or authenticated.")
 
 
-def get_device_from_cert(cert_info: dict) -> str:
-    """Extract device ID from certificate"""
-    try:
-        # Parse the subject to get the device ID (Common Name)
-        subject_str = cert_info.get("subject", "")
-        # Simple parsing for demo - in production, use proper X.509 parsing
-        if "CN=" in subject_str:
-            cn_part = subject_str.split("CN=")[1].split(",")[0]
-            return cn_part.strip()
-        else:
-            # Fallback to serial number
-            return f"device-{cert_info.get('serial_number', 'unknown')}"
-    except Exception as e:
-        logger.error(f"Failed to extract device ID from certificate: {e}")
-        return "unknown-device"
-
-
-def register_or_update_device(device_id: str, cert_info: dict, ip_address: str):
-    """Register or update device in the database"""
+def register_or_update_device(device_id: str, public_key: str, ip_address: str):
+    """Register or update device in the database with its public key"""
     try:
         conn = sqlite3.connect('secure_devices.db')
         cursor = conn.cursor()
@@ -227,27 +204,28 @@ def register_or_update_device(device_id: str, cert_info: dict, ip_address: str):
         exists = cursor.fetchone()
 
         if exists:
-            # Update existing device
+            # Update existing device's public key and last seen
             cursor.execute('''
                            UPDATE devices
                            SET last_seen  = CURRENT_TIMESTAMP,
+                               public_key = ?,
                                ip_address = ?
                            WHERE device_id = ?
-                           ''', (ip_address, device_id))
+                           ''', (public_key, ip_address, device_id))
         else:
-            # Insert new device
+            # Insert new device with public key
             cursor.execute('''
                            INSERT INTO devices
-                               (device_id, certificate_serial, certificate_subject, ip_address)
-                           VALUES (?, ?, ?, ?)
-                           ''', (device_id, cert_info.get("serial_number"),
-                                 cert_info.get("subject"), ip_address))
+                               (device_id, public_key, ip_address)
+                           VALUES (?, ?, ?)
+                           ''', (device_id, public_key, ip_address))
 
         conn.commit()
         conn.close()
+        logger.info(f"Device {device_id} registered/updated with public key.")
 
     except Exception as e:
-        logger.error(f"Failed to register/update device: {e}")
+        logger.error(f"Failed to register/update device {device_id}: {e}")
 
 
 @app.on_event("startup")
@@ -266,28 +244,34 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
 
-@app.get("/api/auth/cert-info")
-async def get_cert_info(request: Request):
-    """Get client certificate information"""
-    cert_info = get_client_cert_info(request)
-    device_id = get_device_from_cert(cert_info)
-
-    # Register/update device
+@app.post("/api/register")
+async def register_device(registration_data: PublicKeyRegistration, request: Request):
+    """
+    Register a new device with its public key.
+    This endpoint is designed to be initially unauthenticated for onboarding.
+    """
+    device_id = registration_data.device_id
+    public_key = registration_data.public_key
     client_ip = request.client.host
-    register_or_update_device(device_id, cert_info, client_ip)
 
-    return {
-        "device_id": device_id,
-        "certificate": cert_info,
-        "authenticated": True
-    }
+    if not device_id or not public_key:
+        raise HTTPException(status_code=400, detail="Device ID and public key are required for registration.")
+
+    try:
+        register_or_update_device(device_id, public_key, client_ip)
+        logger.info(f"Device '{device_id}' successfully registered/updated from IP: {client_ip}")
+        return {"status": "success", "message": "Device registered successfully."}
+    except Exception as e:
+        logger.error(f"Error during device registration for {device_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to register device: {e}")
 
 
 @app.get("/api/device/info")
-async def get_device_info(request: Request):
+async def get_device_info(request: Request, device_id: str = Depends(get_authenticated_device_id)):
     """Get device information"""
-    cert_info = get_client_cert_info(request)
-    device_id = get_device_from_cert(cert_info)
+    # For now, device_id is expected to be passed via query param or headers,
+    # or determined by a future authentication mechanism.
+    # The Depends(get_authenticated_device_id) indicates this endpoint requires authentication.
 
     try:
         conn = sqlite3.connect('secure_devices.db')
@@ -318,14 +302,13 @@ async def get_device_info(request: Request):
 
 
 @app.post("/api/telemetry")
-async def receive_telemetry(telemetry: TelemetryData, request: Request):
+async def receive_telemetry(telemetry: TelemetryData, request: Request,
+                            authenticated_device_id: str = Depends(get_authenticated_device_id)):
     """Receive telemetry data from devices"""
-    cert_info = get_client_cert_info(request)
-    device_id = get_device_from_cert(cert_info)
-
-    # Verify device_id matches certificate
-    if telemetry.device_id != device_id:
-        raise HTTPException(status_code=403, detail="Device ID mismatch")
+    # Verify device_id in payload matches authenticated device ID
+    if telemetry.device_id != authenticated_device_id:
+        raise HTTPException(status_code=403, detail="Device ID in payload does not match authenticated device.")
+    device_id = telemetry.device_id # Use the ID from the payload after authentication check
 
     try:
         conn = sqlite3.connect('secure_devices.db')
@@ -357,14 +340,13 @@ async def receive_telemetry(telemetry: TelemetryData, request: Request):
 
 
 @app.post("/api/device/status")
-async def update_device_status(status_update: StatusUpdate, request: Request):
+async def update_device_status(status_update: StatusUpdate, request: Request,
+                               authenticated_device_id: str = Depends(get_authenticated_device_id)):
     """Update device status"""
-    cert_info = get_client_cert_info(request)
-    device_id = get_device_from_cert(cert_info)
-
-    # Verify device_id matches certificate
-    if status_update.device_id != device_id:
-        raise HTTPException(status_code=403, detail="Device ID mismatch")
+    # Verify device_id in payload matches authenticated device ID
+    if status_update.device_id != authenticated_device_id:
+        raise HTTPException(status_code=403, detail="Device ID in payload does not match authenticated device.")
+    device_id = status_update.device_id # Use the ID from the payload after authentication check
 
     try:
         conn = sqlite3.connect('secure_devices.db')
@@ -397,14 +379,12 @@ async def update_device_status(status_update: StatusUpdate, request: Request):
 
 
 @app.get("/api/device/{device_id}/config")
-async def get_device_config(device_id: str, request: Request):
+async def get_device_config(device_id: str, request: Request,
+                            authenticated_device_id: str = Depends(get_authenticated_device_id)):
     """Get device configuration"""
-    cert_info = get_client_cert_info(request)
-    authenticated_device_id = get_device_from_cert(cert_info)
-
-    # Verify device_id matches certificate
+    # Verify device_id in path matches authenticated device ID
     if device_id != authenticated_device_id:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail="Access denied: Device ID mismatch.")
 
     try:
         conn = sqlite3.connect('secure_devices.db')
@@ -502,41 +482,12 @@ async def get_device_telemetry(device_id: str, limit: int = 100):
         raise HTTPException(status_code=500, detail="Failed to retrieve telemetry")
 
 
-def create_ssl_context():
-    """Create SSL context with client certificate verification"""
-    # Load server certificate and key
-    ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-    ssl_context.load_cert_chain(
-        certfile="server.crt",
-        keyfile="server.key"
-    )
-
-    # Load CA certificate for client verification
-    ssl_context.load_verify_locations(cafile="ca.crt")
-
-    # Require client certificates
-    ssl_context.verify_mode = ssl.CERT_REQUIRED
-
-    return ssl_context
-
-
 if __name__ == "__main__":
-    # Check if certificate files exist
-    required_files = ["server.crt", "server.key", "ca.crt"]
-    for file in required_files:
-        if not os.path.exists(file):
-            logger.error(f"Required certificate file not found: {file}")
-            logger.info("Please generate the required certificates first")
-            exit(1)
-
-    # Create SSL context
-    ssl_context = create_ssl_context()
-
-    # Run the server with SSL
+    # The server is intended to run behind a proxy like Traefik that handles SSL/TLS.
+    # Therefore, we run on HTTP.
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=8443,
-        ssl_context=ssl_context,
+        port=8000,  # Changed to a standard HTTP port
         log_level="info"
     )
