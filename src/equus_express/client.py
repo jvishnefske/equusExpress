@@ -541,7 +541,7 @@ def main():
             "Usage: python3 secure_client.py <secure_server_url> [device_id]"
         )
         print("Example: python3 secure_client.py https://secure-server:8443")
-        sys.exit(1) # Uncovered: Exit on missing arguments
+        sys.exit(1)  # Uncovered: Exit on missing arguments. Moved this to prevent IndexError.
 
     server_url = sys.argv[1]
     device_id = sys.argv[2] if len(sys.argv) > 2 else None

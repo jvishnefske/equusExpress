@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from equus_express.server import app, init_secure_db, lifespan # Import lifespan
 from fastapi import FastAPI # Import FastAPI to create new app instances
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock # Added MagicMock import
 
 # Initialize the TestClient
 client = TestClient(app)

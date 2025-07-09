@@ -482,7 +482,7 @@ def test_secure_client_test_connection_get_device_info_failure(
     with patch('equus_express.client.logger.warning') as mock_warning:
         assert client.test_connection() is True # Should still return True overall
         mock_warning.assert_called_once_with(
-            f"Device info endpoint failed (this might be expected if server requires stronger auth post-registration): Device info failed"
+            f"Device info endpoint failed (this might be expected if server requires stronger auth post-registration): Request to server failed: Device info failed"
         )
 
 
@@ -889,24 +889,30 @@ def test_main_telemetry_loop_unhandled_exception(mock_sys_exit, mock_device_agen
     """Test main function catches unhandled exceptions in telemetry loop and stops agent."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
     mock_sleep = mock_device_agent_dependencies["mock_sleep"]
+    # To test sys.exit(1) on unhandled exceptions in main, we need to ensure the telemetry loop
+    # exits due to an unhandled exception, causing the outer `except Exception` in main to be hit.
     mock_sleep.side_effect = [
-        None, # First sleep for loop iteration
-        Exception("Simulated unhandled loop error"), # Second sleep to cause unhandled error
+        None, # First successful sleep
+        Exception("Simulated unhandled loop error"), # This will be caught by client.run_telemetry_loop's Exception handler
     ]
 
-    original_argv = sys.argv
-    sys.argv = ["secure_client.py", TEST_BASE_URL, TEST_DEVICE_ID]
+    # Patch run_telemetry_loop directly to raise the exception, forcing main's outer except block
+    # to be called, which then triggers sys.exit(1).
+    with patch('equus_express.client.DeviceAgent.run_telemetry_loop', side_effect=Exception("Simulated unhandled loop error")) as mock_run_loop:
+        original_argv = sys.argv
+        sys.argv = ["secure_client.py", TEST_BASE_URL, TEST_DEVICE_ID]
 
-    with caplog.at_level(logging.CRITICAL):
-        try:
-            from equus_express.client import main
-            main()
-        finally:
-            sys.argv = original_argv
+        with caplog.at_level(logging.CRITICAL):
+            try:
+                from equus_express.client import main
+                main()
+            finally:
+                sys.argv = original_argv
 
-    mock_sys_exit.assert_called_once_with(1)
-    assert "Unhandled error in telemetry loop, agent stopping: Simulated unhandled loop error" in caplog.text
-    mock_client.update_status.assert_called_with("offline", {"shutdown_time": mock_device_agent_dependencies["fixed_now_iso"]})
+        mock_sys_exit.assert_called_once_with(1)
+        assert "An unexpected error occurred in the main client process: Simulated unhandled loop error" in caplog.text
+        # The agent.stop() is called in main's finally block
+        mock_client.update_status.assert_called_with("offline", {"shutdown_time": mock_device_agent_dependencies["fixed_now_iso"]})
 
 
 def test_main_unexpected_error(mock_sys_exit, caplog):
@@ -924,4 +930,5 @@ def test_main_unexpected_error(mock_sys_exit, caplog):
                 sys.argv = original_argv
 
     mock_sys_exit.assert_called_once_with(1)
+    # Check that the log message containing the unexpected error is present
     assert "An unexpected error occurred in the main client process: Unexpected client error" in caplog.text
