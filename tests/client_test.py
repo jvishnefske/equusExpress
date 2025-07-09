@@ -89,7 +89,7 @@ def mock_httpx_client():
 
 @pytest.fixture
 def secure_client_no_keys_exist(
-    tmp_key_dir, mock_crypto, mock_httpx_client # Changed fixture name
+    tmp_key_dir, mock_crypto, mock_httpx_client
 ):
     """SecureAPIClient instance where no keys exist initially."""
     with (
@@ -108,7 +108,7 @@ def secure_client_no_keys_exist(
 
 
 @pytest.fixture
-def secure_client_keys_exist(tmp_key_dir, mock_crypto, mock_httpx_client): # Changed fixture name
+def secure_client_keys_exist(tmp_key_dir, mock_crypto, mock_httpx_client):
     """SecureAPIClient instance where keys already exist."""
     # Simulate files existing
     with open(os.path.join(tmp_key_dir, "device.pem"), "wb") as f:
@@ -130,35 +130,42 @@ def secure_client_keys_exist(tmp_key_dir, mock_crypto, mock_httpx_client): # Cha
 @pytest.fixture
 def mock_device_agent_dependencies():
     """Mocks system calls for DeviceAgent's telemetry collection."""
+    # Define a fixed datetime for consistent assertions
+    fixed_now = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
     with (
-        patch("equus_express.client.SecureAPIClient") as MockClient, # Removed src.
-        patch("equus_express.client.os.path.exists", return_value=True), # Removed src.
+        patch("equus_express.client.SecureAPIClient") as MockClient,
+        patch("equus_express.client.os.path.exists", return_value=True),
         patch(
-            "equus_express.client.socket.gethostname", # Removed src.
+            "equus_express.client.socket.gethostname",
             return_value=TEST_DEVICE_ID,
         ),
-        patch("equus_express.client.time.sleep") as mock_sleep, # Removed src.
+        patch("equus_express.client.time.sleep") as mock_sleep,
+        patch("equus_express.client.datetime") as mock_datetime, # Patch datetime
         patch(
-            "equus_express.client.SecureAPIClient.send_telemetry", # Removed src.
+            "equus_express.client.SecureAPIClient.send_telemetry",
             return_value={"status": "success"},
         ),
         patch(
-            "equus_express.client.SecureAPIClient.update_status", # Removed src.
+            "equus_express.client.SecureAPIClient.update_status",
             return_value={"status": "success"},
         ),
         patch(
-            "equus_express.client.SecureAPIClient.test_connection", # Removed src.
+            "equus_express.client.SecureAPIClient.test_connection",
             return_value=True,
         ),
         patch(
-            "equus_express.client.SecureAPIClient.get_device_info", # Removed src.
+            "equus_express.client.SecureAPIClient.get_device_info",
             return_value={"device_id": TEST_DEVICE_ID},
         ),
         patch(
-            "equus_express.client.SecureAPIClient.register_device", # Removed src.
+            "equus_express.client.SecureAPIClient.register_device",
             return_value={"status": "success"},
         ),
     ):
+        # Configure mock_datetime
+        mock_datetime.now.return_value = fixed_now
+        mock_datetime.timezone = timezone # Ensure timezone.utc is accessible on the mock
 
         mock_client_instance = MockClient.return_value
         # Configure the mock client methods that DeviceAgent calls
@@ -169,27 +176,27 @@ def mock_device_agent_dependencies():
         # Mock internal telemetry collection methods
         with (
             patch(
-                "equus_express.client.DeviceAgent._get_uptime", # Removed src.
+                "equus_express.client.DeviceAgent._get_uptime",
                 return_value=100.0,
             ),
             patch(
-                "equus_express.client.DeviceAgent._get_cpu_usage", # Removed src.
+                "equus_express.client.DeviceAgent._get_cpu_usage",
                 return_value=25.0,
             ),
             patch(
-                "equus_express.client.DeviceAgent._get_memory_usage", # Removed src.
+                "equus_express.client.DeviceAgent._get_memory_usage",
                 return_value={"total": 1000, "percent": 50},
             ),
             patch(
-                "equus_express.client.DeviceAgent._get_disk_usage", # Removed src.
+                "equus_express.client.DeviceAgent._get_disk_usage",
                 return_value={"total": 1000, "percent": 70},
             ),
             patch(
-                "equus_express.client.DeviceAgent._get_temperature", # Removed src.
+                "equus_express.client.DeviceAgent._get_temperature",
                 return_value=45.0,
             ),
             patch(
-                "equus_express.client.DeviceAgent._get_ip_address", # Removed src.
+                "equus_express.client.DeviceAgent._get_ip_address",
                 return_value="192.168.1.100",
             ),
         ):
@@ -198,6 +205,7 @@ def mock_device_agent_dependencies():
                 "MockClient": MockClient,
                 "mock_client_instance": mock_client_instance,
                 "mock_sleep": mock_sleep,
+                "fixed_now_iso": fixed_now.isoformat(), # Provide the fixed isoformat string for assertions
             }
 
 
@@ -205,18 +213,18 @@ def mock_device_agent_dependencies():
 
 
 def test_secure_client_initialization_generates_keys(
-    secure_client_no_keys_exist, mock_crypto, mock_requests_session
+    secure_client_no_keys_exist, mock_crypto, mock_httpx_client
 ):
     """Test that SecureAPIClient generates keys if they don't exist."""
     client = secure_client_no_keys_exist
     assert client.private_key is not None
     assert client.public_key_pem == MOCK_PUBLIC_KEY_PEM.strip()
     mock_crypto["mock_generate_private_key"].assert_called_once()
-    mock_crypto["mock_load_pem_private_key"].assert_not_called()
+    mock_crypto["mock_serialization"].load_pem_private_key.assert_not_called() # Updated mock assertion
 
 
 def test_secure_client_initialization_loads_keys(
-    secure_client_keys_exist, mock_crypto, mock_requests_session
+    secure_client_keys_exist, mock_crypto, mock_httpx_client
 ):
     """Test that SecureAPIClient loads keys if they exist."""
     client = secure_client_keys_exist
@@ -225,7 +233,7 @@ def test_secure_client_initialization_loads_keys(
     # Mock crypto ensures a consistent public key PEM is returned when .public_bytes is called.
     assert client.public_key_pem == MOCK_PUBLIC_KEY_PEM.strip()
     mock_crypto["mock_generate_private_key"].assert_not_called()
-    mock_crypto["mock_load_pem_private_key"].assert_called_once()
+    mock_crypto["mock_serialization"].load_pem_private_key.assert_called_once() # Updated mock assertion
 
 
 def test_secure_client_make_request_success(
