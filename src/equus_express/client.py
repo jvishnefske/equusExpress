@@ -54,7 +54,7 @@ class SecureAPIClient:
         # Create httpx client
         self.client = httpx.Client(
             base_url=self.base_url,
-            verify=False, # Assuming Traefik handles server SSL, or running HTTP
+            verify=True,
             headers={ # Set default headers, including device ID for identification
                 "User-Agent": f"SecureClient/{self.device_id}",
                 "Content-Type": "application/json",
