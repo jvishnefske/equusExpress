@@ -147,7 +147,7 @@ class PublicKeyRegistration(BaseModel):
 # Database initialization
 def init_secure_db():
     """Initialize the secure database for device management"""
-    db_file = os.getenv("SQLITE_DB_PATH", "secure_devices.db")
+    db_file = dp_path()
     conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
 
@@ -279,6 +279,10 @@ def init_secure_db():
     conn.close()
 
 
+def dp_path():
+    return os.getenv("SQLITE_DB_PATH", "secure_devices.db")
+
+
 # Placeholder for future authentication and device identification logic.
 # This function will need to be replaced with logic that validates incoming requests
 # based on the client's public key (e.g., signed JWTs or request bodies).
@@ -304,7 +308,7 @@ def get_authenticated_device_id(request: Request) -> str:
 def register_or_update_device(device_id: str, public_key: str, ip_address: str):
     """Register or update device in the database with its public key"""
     try:
-        db_file = os.getenv("SQLITE_DB_PATH", "secure_devices.db")
+        db_file = dp_path()
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
 
@@ -451,7 +455,7 @@ async def get_device_info(
     # The Depends(get_authenticated_device_id) indicates this endpoint requires authentication.
 
     try:
-        db_file = os.getenv("SQLITE_DB_PATH", "secure_devices.db")
+        db_file = dp_path()
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
         cursor.execute(
@@ -502,7 +506,7 @@ async def receive_telemetry(
     )  # Use the ID from the payload after authentication check
 
     try:
-        db_file = os.getenv("SQLITE_DB_PATH", "secure_devices.db")
+        db_file = dp_path()
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
 
@@ -555,7 +559,7 @@ async def update_device_status(
     )  # Use the ID from the payload after authentication check
 
     try:
-        db_file = os.getenv("SQLITE_DB_PATH", "secure_devices.db")
+        db_file = dp_path
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
 
@@ -613,7 +617,7 @@ async def get_device_config(
         )
 
     try:
-        db_file = os.getenv("SQLITE_DB_PATH", "secure_devices.db")
+        db_file = dp_path()
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
         cursor.execute(
@@ -654,7 +658,7 @@ async def get_device_config(
 async def list_devices():
     """List all devices (admin endpoint)"""
     try:
-        db_file = os.getenv("SQLITE_DB_PATH", "secure_devices.db")
+        db_file = dp_path()
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
         cursor.execute(
@@ -689,7 +693,7 @@ async def list_devices():
 async def get_device_telemetry(device_id: str, limit: int = 100):
     """Get telemetry data for a specific device (admin endpoint)"""
     try:
-        db_file = os.getenv("SQLITE_DB_PATH", "secure_devices.db")
+        db_file = dp_path()
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
         cursor.execute(
