@@ -311,7 +311,7 @@ def test_secure_client_make_request_http_error(
     )
     mock_httpx_client.request.return_value.raise_for_status.side_effect = httpx.HTTPStatusError(  # Changed mock_requests_session to mock_httpx_client
         "Not Found",
-        request=httpx.Request("GET", "http://test.com"),
+        request=httpx.Request("GET", "https://test.com"),
         response=httpx.Response(404),
     )  # Changed exception type and added required args
 
