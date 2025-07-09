@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 from equus_express.server import app, init_secure_db
 from datetime import datetime, timezone
+from unittest.mock import patch # Added patch import
 
 # Initialize the TestClient
 client = TestClient(app)

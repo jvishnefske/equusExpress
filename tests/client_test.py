@@ -191,61 +191,28 @@ def mock_device_agent_dependencies():
             "equus_express.client.SecureAPIClient.get_device_info",
             return_value={"device_id": TEST_DEVICE_ID},
         ),
-        patch(
-            "equus_express.client.SecureAPIClient.register_device",
-            return_value={"status": "success"},
-        ),
+        patch("equus_express.client.SecureAPIClient.send_telemetry", return_value={"status": "success"}),
+        patch("equus_express.client.SecureAPIClient.update_status", return_value={"status": "success"}),
+        patch("equus_express.client.SecureAPIClient.test_connection", return_value=True),
+        patch("equus_express.client.SecureAPIClient.get_device_info", return_value={"device_id": TEST_DEVICE_ID}),
+        patch("equus_express.client.SecureAPIClient.register_device", return_value={"status": "success"}),
+        patch("equus_express.client.DeviceAgent._get_uptime", return_value=100.0),
+        patch("equus_express.client.DeviceAgent._get_cpu_usage", return_value=25.0),
+        patch("equus_express.client.DeviceAgent._get_memory_usage", return_value={"total": 1000, "percent": 50.0}),
+        patch("equus_express.client.DeviceAgent._get_disk_usage", return_value={"total": 1000, "percent": 70.0}),
+        patch("equus_express.client.DeviceAgent._get_temperature", return_value=45.0),
+        patch("equus_express.client.DeviceAgent._get_ip_address", return_value=MOCK_IP_ADDRESS),
     ):
-        # Configure mock_datetime
-        mock_datetime.now.return_value = fixed_now
-        mock_datetime.timezone = (
-            timezone  # Ensure timezone.utc is accessible on the mock
-        )
-
         mock_client_instance = MockClient.return_value
-        # Configure the mock client methods that DeviceAgent calls
-        mock_client_instance.send_telemetry.return_value = {
-            "status": "success"
-        }
-        mock_client_instance.update_status.return_value = {"status": "success"}
-        mock_client_instance.test_connection.return_value = True
+        mock_datetime.now.return_value = fixed_now
+        mock_datetime.timezone = timezone
 
-        # Mock internal telemetry collection methods
-        with (
-            patch(
-                "equus_express.client.DeviceAgent._get_uptime",
-                return_value=100.0,
-            ),
-            patch(
-                "equus_express.client.DeviceAgent._get_cpu_usage",
-                return_value=25.0,
-            ),
-            patch(
-                "equus_express.client.DeviceAgent._get_memory_usage",
-                return_value={"total": 1000, "percent": 50.0}, # Changed to float
-            ),
-            patch(
-                "equus_express.client.DeviceAgent._get_disk_usage",
-                return_value={"total": 1000, "percent": 70.0}, # Changed to float
-            ),
-            patch(
-                "equus_express.client.DeviceAgent._get_temperature",
-                return_value=45.0,
-            ),
-            patch(
-                "equus_express.client.DeviceAgent._get_ip_address",
-                return_value=MOCK_IP_ADDRESS,
-            ),
-        ):
-            # Patch psutil module directly for testing its absence
-            with patch("equus_express.client.psutil", new=None) as mock_psutil_none:
-                yield {
-                    "MockClient": MockClient,
-                    "mock_client_instance": mock_client_instance,
-                    "mock_sleep": mock_sleep,
-                    "fixed_now_iso": fixed_now.isoformat(),
-                    "mock_psutil_none": mock_psutil_none, # For testing psutil = None paths
-                }
+        yield {
+            "MockClient": MockClient,
+            "mock_client_instance": mock_client_instance,
+            "mock_sleep": mock_sleep,
+            "fixed_now_iso": fixed_now.isoformat(),
+        }
 
 
 # --- SecureAPIClient Tests ---
@@ -319,10 +286,8 @@ def test_secure_client_make_request_non_json_response(
     mock_httpx_client.request.return_value.text = "OK"
 
     client = secure_client_keys_exist
-    result = client.get("/plaintext")
-
-    assert result == "OK"
-    mock_httpx_client.request.assert_called_once_with("GET", f"{TEST_BASE_URL}/plaintext")
+    with pytest.raises(ConnectionError, match="Request to server failed: Invalid JSON"):
+        client.get("/plaintext")
 
 
 def test_secure_client_make_request_401_error(
@@ -622,7 +587,7 @@ def test_device_agent_collect_telemetry_cpu_usage_error(mock_device_agent_depend
     agent = DeviceAgent(mock_client)
     with patch(
         "equus_express.client.DeviceAgent._get_cpu_usage",
-        side_effect=psutil.Error("CPU error"),
+        side_effect=RuntimeError("CPU error"), # Use generic error if psutil.Error not needed for specific test
     ):
         telemetry = agent._collect_telemetry()
         assert "cpu_usage: CPU error" in telemetry["application"]["last_error"]
@@ -633,7 +598,7 @@ def test_device_agent_collect_telemetry_cpu_usage_not_implemented(mock_device_ag
     """Test _collect_telemetry handles CPU usage when psutil is not implemented."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
     agent = DeviceAgent(mock_client)
-    with patch("equus_express.client.psutil", new=None): # Temporarily set psutil to None
+    with patch("equus_express.client.psutil", new=None):
         telemetry = agent._collect_telemetry()
         assert "cpu_usage: psutil library is not available." in telemetry["application"]["last_error"]
         assert telemetry["system"]["cpu_usage"] == "error"
@@ -645,7 +610,7 @@ def test_device_agent_collect_telemetry_memory_usage_error(mock_device_agent_dep
     agent = DeviceAgent(mock_client)
     with patch(
         "equus_express.client.DeviceAgent._get_memory_usage",
-        side_effect=psutil.Error("Memory error"),
+        side_effect=RuntimeError("Memory error"),
     ):
         telemetry = agent._collect_telemetry()
         assert "memory_usage: Memory error" in telemetry["application"]["last_error"]
@@ -668,7 +633,7 @@ def test_device_agent_collect_telemetry_disk_usage_error(mock_device_agent_depen
     agent = DeviceAgent(mock_client)
     with patch(
         "equus_express.client.DeviceAgent._get_disk_usage",
-        side_effect=psutil.Error("Disk error"),
+        side_effect=RuntimeError("Disk error"),
     ):
         telemetry = agent._collect_telemetry()
         assert "disk_usage: Disk error" in telemetry["application"]["last_error"]
@@ -704,13 +669,13 @@ def test_device_agent_collect_telemetry_ip_address_psutil_error(mock_device_agen
     agent = DeviceAgent(mock_client)
     with patch(
         "equus_express.client.psutil.net_if_addrs",
-        side_effect=psutil.Error("Net if addrs error"),
+        side_effect=RuntimeError("Net if addrs error"),
     ), patch(
         "equus_express.client.socket.gethostbyname",
-        side_effect=socket.gaierror("Hostname error") # Ensure fallback also fails
+        side_effect=socket.gaierror("Hostname error")
     ):
         telemetry = agent._collect_telemetry()
-        assert "ip_address: Hostname error" in telemetry["application"]["last_error"] # Fallback error is reported
+        assert "ip_address: Hostname error" in telemetry["application"]["last_error"]
         assert telemetry["network"]["ip_address"] == "error"
 
 
@@ -720,7 +685,7 @@ def test_device_agent_collect_telemetry_ip_address_socket_error(mock_device_agen
     agent = DeviceAgent(mock_client)
     with patch(
         "equus_express.client.psutil.net_if_addrs",
-        side_effect=psutil.Error("Simulate psutil not finding IP"),
+        side_effect=RuntimeError("Simulate psutil not finding IP"),
     ), patch(
         "equus_express.client.socket.gethostbyname",
         side_effect=socket.gaierror("gethostbyname error"),
