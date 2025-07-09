@@ -14,4 +14,48 @@ This is a placeholder repository for a generic application. It serves as a start
 
 ## Getting Started
 
-More details will be added here as the project evolves.
+# Certificate Provisioning System Setup Guide
+
+This guide walks you through setting up a complete certificate provisioning system for Raspberry Pi devices with FastAPI.
+
+## Architecture Overview
+
+1. **Provisioning Server** (HTTP) - Handles certificate requests and approval workflow
+2. **Secure Server** (HTTPS with mTLS) - Provides authenticated API services
+3. **Raspberry Pi Client** - Requests certificates and operates with mTLS
+4. **Admin Interface** - Web-based certificate approval system
+
+## Prerequisites
+
+### Server Requirements
+- Python 3.8+
+- OpenSSL
+- SQLite3
+- Network access for clients
+
+### Client Requirements (Raspberry Pi)
+- Raspberry Pi OS
+- Python 3.8+
+- Network connectivity to servers
+
+## Step 1: Generate Root Certificates
+
+First, create the Certificate Authority (CA) and server certificates:
+
+```bash
+# Create certificate directory
+mkdir -p /opt/iot-certs
+cd /opt/iot-certs
+
+# Generate CA private key
+openssl genrsa -out ca.key 4096
+
+# Generate CA certificate (valid for 10 years)
+openssl req -new -x509 -days 3650 -key ca.key -out ca.crt \
+  -subj "/C=US/ST=State/L=City/O=IoT Company/CN=IoT-CA"
+
+# Generate server private key
+openssl genrsa -out server.key 4096
+
+# Generate server certificate signing request
+openssl req -new -key server.key -out server.c
