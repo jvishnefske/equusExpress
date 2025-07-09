@@ -82,6 +82,13 @@ async def lifespan(app: FastAPI):
         # Re-raise the exception to prevent the application from starting without static files
         raise RuntimeError(f"Failed to initialize static file serving: {e}")
 
+    # Mount the static directory using the path determined in the lifespan function
+    app.mount(
+        "/static",
+        StaticFiles(directory=app.state.static_path), # Use the dynamically determined path
+        name="static",
+    )
+
     yield # This is where your application starts running and serves requests
     
     logger.info("Application shutting down...")
@@ -91,19 +98,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Secure IoT API Server", lifespan=lifespan
-)  # Updated FastAPI init
+)
 security = HTTPBearer()
 
 # Initialize Jinja2Templates (templates directory remains at the project root)
 templates = Jinja2Templates(
     directory=os.path.join(PROJECT_ROOT_DIR, "templates")
-)
-
-# Mount the static directory using the path determined in the lifespan function
-app.mount(
-    "/static",
-    StaticFiles(directory=app.state.static_path), # Use the dynamically determined path
-    name="static",
 )
 
 
