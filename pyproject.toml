@@ -9,8 +9,7 @@ dependencies = [
     "fastapi>=0.116.0",
     "uvicorn>=0.35.0",
     "jinja2",
-    "httpx",
-    "requests", # Added requests as a dependency for the client
+    "httpx", # Used by client and test client
 ]
 
 [tool.setuptools.packages.find]

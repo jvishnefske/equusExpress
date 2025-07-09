@@ -4,10 +4,9 @@ Secure API Client with mTLS Authentication
 Uses provisioned certificates to authenticate with the secure server
 """
 
-import requests
+import httpx # Changed from requests
 import ssl
-import urllib3
-from urllib3.exceptions import InsecureRequestWarning
+# Removed urllib3 and InsecureRequestWarning as httpx handles verify differently
 import json
 import logging
 import os
@@ -53,21 +52,14 @@ class SecureAPIClient:
         os.makedirs(self.key_dir, exist_ok=True)
         self._load_or_generate_keys()
 
-        # Create session (no client cert for now, will rely on new auth)
-        self.session = requests.Session()
-        self.session.verify = (
-            False  # Assuming Traefik handles server SSL, or running HTTP
-        )
-        urllib3.disable_warnings(
-            InsecureRequestWarning
-        )  # Suppress warnings if verify=False
-
-        # Set default headers, including device ID for identification
-        self.session.headers.update(
-            {
+        # Create httpx client
+        self.client = httpx.Client(
+            base_url=self.base_url,
+            verify=False, # Assuming Traefik handles server SSL, or running HTTP
+            headers={ # Set default headers, including device ID for identification
                 "User-Agent": f"SecureClient/{self.device_id}",
                 "Content-Type": "application/json",
-                "X-Device-Id": self.device_id,  # Temporarily pass device_id in header for simplified auth
+                "X-Device-Id": self.device_id, # Temporarily pass device_id in header for simplified auth
             }
         )
 
@@ -119,7 +111,7 @@ class SecureAPIClient:
 
         try:
             logger.debug(f"Making {method} request to {url}")
-            response = self.session.request(method, url, **kwargs)
+            response = self.client.request(method, url, **kwargs) # Changed self.session to self.client
 
             # Log response status
             logger.debug(f"Response status: {response.status_code}")
@@ -133,13 +125,10 @@ class SecureAPIClient:
             except json.JSONDecodeError:
                 return response.text
 
-        except requests.exceptions.SSLError as e:
-            logger.error(f"SSL/TLS error: {e}")
-            raise ConnectionError(f"SSL authentication failed: {e}")
-        except requests.exceptions.ConnectionError as e:
+        except httpx.ConnectError as e: # Changed from requests.exceptions.ConnectionError
             logger.error(f"Connection error: {e}")
             raise ConnectionError(f"Failed to connect to server: {e}")
-        except requests.exceptions.HTTPError as e:
+        except httpx.HTTPStatusError as e: # Changed from requests.exceptions.HTTPError
             logger.error(f"HTTP error: {e}")
             if e.response.status_code == 401:
                 raise PermissionError(
@@ -151,7 +140,7 @@ class SecureAPIClient:
                 )
             else:
                 raise
-        except requests.exceptions.RequestException as e:
+        except httpx.RequestError as e: # Changed from requests.exceptions.RequestException (and covers SSLError)
             logger.error(f"Request failed: {e}")
             raise
 

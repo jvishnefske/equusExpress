@@ -5,7 +5,7 @@ import json
 from unittest.mock import patch, MagicMock, mock_open
 from datetime import datetime, timezone
 import time
-import requests  # New import
+import httpx # Changed from requests
 
 # Import the classes to be tested
 from src.equus_express.client import SecureAPIClient, DeviceAgent
@@ -72,10 +72,10 @@ def mock_crypto():
 
 
 @pytest.fixture
-def mock_requests_session():
-    """Fixture to mock requests.Session."""
-    with patch("src.equus_express.client.requests.Session") as MockSession:
-        mock_session_instance = MockSession.return_value
+def mock_httpx_client(): # Renamed fixture
+    """Fixture to mock httpx.Client."""
+    with patch("src.equus_express.client.httpx.Client") as MockClient: # Changed to httpx.Client
+        mock_client_instance = MockClient.return_value
         # Default mock response for success
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -86,13 +86,13 @@ def mock_requests_session():
         mock_response.raise_for_status.return_value = (
             None  # No HTTP errors by default
         )
-        mock_session_instance.request.return_value = mock_response
-        yield mock_session_instance
+        mock_client_instance.request.return_value = mock_response
+        yield mock_client_instance
 
 
 @pytest.fixture
 def secure_client_no_keys_exist(
-    tmp_key_dir, mock_crypto, mock_requests_session
+    tmp_key_dir, mock_crypto, mock_httpx_client # Changed fixture name
 ):
     """SecureAPIClient instance where no keys exist initially."""
     with (
@@ -111,7 +111,7 @@ def secure_client_no_keys_exist(
 
 
 @pytest.fixture
-def secure_client_keys_exist(tmp_key_dir, mock_crypto, mock_requests_session):
+def secure_client_keys_exist(tmp_key_dir, mock_crypto, mock_httpx_client): # Changed fixture name
     """SecureAPIClient instance where keys already exist."""
     # Simulate files existing
     with open(os.path.join(tmp_key_dir, "device.pem"), "wb") as f:
@@ -232,43 +232,43 @@ def test_secure_client_initialization_loads_keys(
 
 
 def test_secure_client_make_request_success(
-    mock_requests_session, secure_client_keys_exist
+    mock_httpx_client, secure_client_keys_exist # Changed fixture name
 ):
     """Test _make_request for a successful response."""
     response_data = {"key": "value"}
-    mock_requests_session.request.return_value.json.return_value = response_data
-    mock_requests_session.request.return_value.status_code = 200
+    mock_httpx_client.request.return_value.json.return_value = response_data # Changed mock_requests_session to mock_httpx_client
+    mock_httpx_client.request.return_value.status_code = 200 # Changed mock_requests_session to mock_httpx_client
 
     client = secure_client_keys_exist
     result = client.get("/test")
 
-    mock_requests_session.request.assert_called_with(
+    mock_httpx_client.request.assert_called_with( # Changed mock_requests_session to mock_httpx_client
         "GET", f"{TEST_BASE_URL}/test"
     )
     assert result == response_data
 
 
 def test_secure_client_make_request_http_error(
-    mock_requests_session, secure_client_keys_exist
+    mock_httpx_client, secure_client_keys_exist # Changed fixture name
 ):
     """Test _make_request handles HTTP errors."""
-    mock_requests_session.request.return_value.status_code = 404
-    mock_requests_session.request.return_value.raise_for_status.side_effect = (
-        requests.exceptions.HTTPError("Not Found")
+    mock_httpx_client.request.return_value.status_code = 404 # Changed mock_requests_session to mock_httpx_client
+    mock_httpx_client.request.return_value.raise_for_status.side_effect = ( # Changed mock_requests_session to mock_httpx_client
+        httpx.HTTPStatusError("Not Found", request=httpx.Request("GET", "http://test.com"), response=httpx.Response(404)) # Changed exception type and added required args
     )
 
     client = secure_client_keys_exist
-    with pytest.raises(requests.exceptions.HTTPError):
+    with pytest.raises(httpx.HTTPStatusError): # Changed exception type
         client.get("/nonexistent")
 
 
 def test_secure_client_register_device(
-    mock_requests_session, secure_client_keys_exist
+    mock_httpx_client, secure_client_keys_exist # Changed fixture name
 ):
     """Test register_device sends correct payload."""
     client = secure_client_keys_exist
     client.register_device()
-    mock_requests_session.request.assert_called_with(
+    mock_httpx_client.request.assert_called_with( # Changed mock_requests_session to mock_httpx_client
         "POST",
         f"{TEST_BASE_URL}/api/register",
         json={
@@ -279,18 +279,18 @@ def test_secure_client_register_device(
 
 
 def test_secure_client_health_check(
-    mock_requests_session, secure_client_keys_exist
+    mock_httpx_client, secure_client_keys_exist # Changed fixture name
 ):
     """Test health_check calls the correct endpoint."""
     client = secure_client_keys_exist
     client.health_check()
-    mock_requests_session.request.assert_called_with(
+    mock_httpx_client.request.assert_called_with( # Changed mock_requests_session to mock_httpx_client
         "GET", f"{TEST_BASE_URL}/health"
     )
 
 
 def test_secure_client_send_telemetry(
-    mock_requests_session, secure_client_keys_exist
+    mock_httpx_client, secure_client_keys_exist # Changed fixture name
 ):
     """Test send_telemetry sends correct payload."""
     client = secure_client_keys_exist
@@ -301,7 +301,7 @@ def test_secure_client_send_telemetry(
         )
         mock_dt.timezone = timezone  # Attach timezone for `timezone.utc` access
         client.send_telemetry(test_data)
-    mock_requests_session.request.assert_called_with(
+    mock_httpx_client.request.assert_called_with( # Changed mock_requests_session to mock_httpx_client
         "POST",
         f"{TEST_BASE_URL}/api/telemetry",
         json={
@@ -313,18 +313,18 @@ def test_secure_client_send_telemetry(
 
 
 def test_secure_client_get_configuration(
-    mock_requests_session, secure_client_keys_exist
+    mock_httpx_client, secure_client_keys_exist # Changed fixture name
 ):
     """Test get_configuration calls the correct endpoint."""
     client = secure_client_keys_exist
     client.get_configuration()
-    mock_requests_session.request.assert_called_with(
+    mock_httpx_client.request.assert_called_with( # Changed mock_requests_session to mock_httpx_client
         "GET", f"{TEST_BASE_URL}/api/device/{TEST_DEVICE_ID}/config"
     )
 
 
 def test_secure_client_update_status(
-    mock_requests_session, secure_client_keys_exist
+    mock_httpx_client, secure_client_keys_exist # Changed fixture name
 ):
     """Test update_status sends correct payload."""
     client = secure_client_keys_exist
@@ -336,7 +336,7 @@ def test_secure_client_update_status(
         )
         mock_dt.timezone = timezone  # Attach timezone for `timezone.utc` access
         client.update_status(test_status, test_details)
-    mock_requests_session.request.assert_called_with(
+    mock_httpx_client.request.assert_called_with( # Changed mock_requests_session to mock_httpx_client
         "POST",
         f"{TEST_BASE_URL}/api/device/status",
         json={
@@ -349,12 +349,12 @@ def test_secure_client_update_status(
 
 
 def test_secure_client_test_connection_success(
-    mock_requests_session, secure_client_keys_exist
+    mock_httpx_client, secure_client_keys_exist # Changed fixture name
 ):
     """Test test_connection success path."""
     client = secure_client_keys_exist
     # Ensure nested calls return success
-    mock_requests_session.request.return_value.json.side_effect = [
+    mock_httpx_client.request.return_value.json.side_effect = [ # Changed mock_requests_session to mock_httpx_client
         {"status": "healthy"},  # For health_check
         {"status": "success", "message": "registered"},  # For register_device
         {"device_id": TEST_DEVICE_ID},  # For get_device_info
@@ -363,11 +363,11 @@ def test_secure_client_test_connection_success(
 
 
 def test_secure_client_test_connection_failure(
-    mock_requests_session, secure_client_keys_exist
+    mock_httpx_client, secure_client_keys_exist # Changed fixture name
 ):
     """Test test_connection failure path."""
     client = secure_client_keys_exist
-    mock_requests_session.request.return_value.json.side_effect = Exception(
+    mock_httpx_client.request.return_value.json.side_effect = Exception( # Changed mock_requests_session to mock_httpx_client
         "Connection failed"
     )
     assert client.test_connection() is False
