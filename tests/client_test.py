@@ -185,42 +185,15 @@ def test_secure_client_register_device_network_error(mock_httpx_client, secure_c
 
 @pytest.fixture
 def mock_device_agent_dependencies():
-    """Mocks system calls for DeviceAgent's telemetry collection."""
-    # Define a fixed datetime for consistent assertions
+    """Mocks system calls and client interactions for DeviceAgent tests."""
     fixed_now = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 
     with (
         patch("equus_express.client.SecureAPIClient") as MockClient,
         patch("equus_express.client.os.path.exists", return_value=True),
-        patch(
-            "equus_express.client.socket.gethostname",
-            return_value=TEST_DEVICE_ID,
-        ),
-        patch("equus_express.client.time.sleep") as mock_sleep,
-        patch(
-            "equus_express.client.datetime"
-        ) as mock_datetime,  # Patch datetime
-        patch(
-            "equus_express.client.SecureAPIClient.send_telemetry",
-            return_value={"status": "success"},
-        ),
-        patch(
-            "equus_express.client.SecureAPIClient.update_status",
-            return_value={"status": "success"},
-        ),
-        patch(
-            "equus_express.client.SecureAPIClient.test_connection",
-            return_value=True,
-        ),
-        patch(
-            "equus_express.client.SecureAPIClient.get_device_info",
-            return_value={"device_id": TEST_DEVICE_ID},
-        ),
-        patch("equus_express.client.SecureAPIClient") as MockClient,
-        patch("equus_express.client.os.path.exists", return_value=True),
         patch("equus_express.client.socket.gethostname", return_value=TEST_DEVICE_ID),
         patch("equus_express.client.time.sleep") as mock_sleep,
-        patch("equus_express.client.datetime") as mock_datetime, # Patch datetime
+        patch("equus_express.client.datetime") as mock_datetime,
     ):
         mock_client_instance = MockClient.return_value
         # Configure the mock client methods that DeviceAgent calls by default for success paths
@@ -231,13 +204,14 @@ def mock_device_agent_dependencies():
         mock_client_instance.register_device.return_value = {"status": "success"}
 
         mock_datetime.now.return_value = fixed_now
-        mock_datetime.timezone = timezone # Ensure timezone.utc is accessible on the mock
+        mock_datetime.timezone = timezone
 
         yield {
             "MockClient": MockClient,
             "mock_client_instance": mock_client_instance,
             "mock_sleep": mock_sleep,
             "fixed_now_iso": fixed_now.isoformat(),
+            "mock_datetime": mock_datetime, # Provide mock_datetime for specific tests
         }
 
 

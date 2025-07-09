@@ -150,6 +150,8 @@ class SecureAPIClient:
             try:
                 return response.json()
             except json.JSONDecodeError:
+                # This branch is taken if response is 2xx but not valid JSON
+                logger.debug(f"Non-JSON response received from {url}")
                 return response.text
 
         except httpx.ConnectError as e:
@@ -196,6 +198,7 @@ class SecureAPIClient:
     def register_device(self):
         """Register the device's public key with the server."""
         if not self.public_key_pem:
+            # Uncovered: Client does not have a public key for registration
             raise RuntimeError("Public key not available for registration.")
 
         logger.info(
@@ -210,6 +213,7 @@ class SecureAPIClient:
             logger.info(f"Device registration response: {response}")
             return response
         except (httpx.RequestError, ConnectionError, PermissionError) as e:
+            # Uncovered: Network/server issue during registration
             logger.error(
                 f"Failed to register device due to network/server issue: {e}"
             )
@@ -271,6 +275,7 @@ class SecureAPIClient:
                 ConnectionError,
                 PermissionError,
             ) as e:  # Catch specific exceptions here
+                # Uncovered: Device info endpoint failed (warning but continue)
                 logger.warning(
                     f"Device info endpoint failed (this might be expected if server requires stronger auth post-registration): {e}"
                 )
@@ -321,6 +326,7 @@ class DeviceAgent:
                 },
             )
         except (httpx.RequestError, ConnectionError, PermissionError) as e:
+            # Uncovered: Failed to send initial 'online' status
             logger.warning(f"Failed to send initial 'online' status: {e}")
             # Decide if this is a critical failure that should stop startup.
             # For now, we'll allow it to proceed but warn.
@@ -366,7 +372,7 @@ class DeviceAgent:
                 json.JSONDecodeError,
                 TypeError,
             ) as e:
-                # Catch specific client communication errors or data formatting issues
+                # Uncovered: Client communication errors or data formatting issues in telemetry loop
                 logger.error(
                     f"Telemetry loop communication or data error: {e}"
                 )
@@ -374,6 +380,7 @@ class DeviceAgent:
             except (
                 Exception
             ) as e:  # Fallback for any other unexpected errors in the loop
+                # Uncovered: Unexpected error in telemetry loop (fallback)
                 logger.exception(
                     f"An unexpected error occurred in telemetry loop: {e}"
                 )  # Use exception for full traceback
@@ -454,7 +461,7 @@ class DeviceAgent:
                 raise  # Re-raise for _collect_telemetry to catch and report
         else:
             logger.debug("psutil not available for CPU usage.")
-            raise PsutilNotInstalled()
+            raise PsutilNotInstalled("psutil library is not available.")
 
     def _get_memory_usage(self) -> dict:
         """Get memory usage information"""
@@ -471,7 +478,7 @@ class DeviceAgent:
                 raise
         else:
             logger.debug("psutil not available for memory usage.")
-            raise PsutilNotInstalled()
+            raise PsutilNotInstalled("psutil library is not available.")
 
     def _get_disk_usage(self) -> dict:
         """Get disk usage information"""
@@ -489,7 +496,7 @@ class DeviceAgent:
                 raise
         else:
             logger.debug("psutil not available for disk usage.")
-            raise PsutilNotInstalled()
+            raise PsutilNotInstalled("psutil library is not available.")
 
     def _get_temperature(self) -> float:
         """Get CPU temperature (Raspberry Pi specific)"""
@@ -517,6 +524,7 @@ class DeviceAgent:
             )
             raise  # Re-raise for _collect_telemetry to catch and report
         except OSError as e:  # General OS error during hostname resolution
+            # Uncovered: OS error during IP address retrieval from hostname
             logger.warning(
                 f"OS error during IP address retrieval from hostname: {e}"
             )
