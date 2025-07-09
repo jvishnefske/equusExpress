@@ -284,13 +284,18 @@ class DeviceAgent:
         self.running = True
 
         # Send initial status after successful connection/registration
-        self.client.update_status(
-            "online",
-            {
-                "startup_time": datetime.now(timezone.utc).isoformat(),
-                "version": "1.0",  # You might want to get this from somewhere dynamically
-            },
-        )
+        try:
+            self.client.update_status(
+                "online",
+                {
+                    "startup_time": datetime.now(timezone.utc).isoformat(),
+                    "version": "1.0",  # You might want to get this from somewhere dynamically
+                },
+            )
+        except (httpx.RequestError, ConnectionError, PermissionError) as e:
+            logger.warning(f"Failed to send initial 'online' status: {e}")
+            # Decide if this is a critical failure that should stop startup.
+            # For now, we'll allow it to proceed but warn.
 
         return True
 
