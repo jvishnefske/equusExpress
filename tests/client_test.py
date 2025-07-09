@@ -6,7 +6,8 @@ import httpx
 from equus_express.client import SecureAPIClient, DeviceAgent
 import os
 import socket
-import psutil # Added import for psutil
+# Removed psutil import as it's not required for unit tests;
+# its behavior is mocked or tested when it's None in client.py
 
 
 # Constants for testing
@@ -599,7 +600,7 @@ def test_device_agent_collect_telemetry_cpu_usage_error(mock_device_agent_depend
     agent = DeviceAgent(mock_client)
     with patch(
         "equus_express.client.DeviceAgent._get_cpu_usage",
-        side_effect=psutil.Error("CPU error"), # Now psutil.Error should be defined
+        side_effect=RuntimeError("CPU error"), # Use generic error to avoid psutil dependency
     ):
         telemetry = agent._collect_telemetry()
         assert "cpu_usage: CPU error" in telemetry["application"]["last_error"]
@@ -623,7 +624,7 @@ def test_device_agent_collect_telemetry_memory_usage_error(mock_device_agent_dep
     agent = DeviceAgent(mock_client)
     with patch(
         "equus_express.client.DeviceAgent._get_memory_usage",
-        side_effect=psutil.Error("Memory error"),
+        side_effect=RuntimeError("Memory error"), # Use generic error
     ):
         telemetry = agent._collect_telemetry()
         assert "memory_usage: Memory error" in telemetry["application"]["last_error"]
@@ -647,7 +648,7 @@ def test_device_agent_collect_telemetry_disk_usage_error(mock_device_agent_depen
     agent = DeviceAgent(mock_client)
     with patch(
         "equus_express.client.DeviceAgent._get_disk_usage",
-        side_effect=psutil.Error("Disk error"),
+        side_effect=RuntimeError("Disk error"), # Use generic error
     ):
         telemetry = agent._collect_telemetry()
         assert "disk_usage: Disk error" in telemetry["application"]["last_error"]
@@ -682,30 +683,31 @@ def test_device_agent_collect_telemetry_ip_address_psutil_error(mock_device_agen
     """Test _collect_telemetry handles IP address errors from psutil."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
     agent = DeviceAgent(mock_client)
-    with patch(
-        "equus_express.client.psutil.net_if_addrs",
-        side_effect=psutil.Error("Net if addrs error"), # Use psutil.Error directly
-    ), patch(
-        "equus_express.client.socket.gethostbyname",
-        side_effect=socket.gaierror("Hostname error")
-    ):
-        telemetry = agent._collect_telemetry()
-        assert "ip_address: Hostname error" in telemetry["application"]["last_error"]
-        assert telemetry["network"]["ip_address"] == "error"
+    # To test psutil error without installing psutil, we mock the module itself
+    with patch("equus_express.client.psutil") as mock_psutil_module:
+        mock_psutil_module.Error = RuntimeError # Define a mock Error type for psutil
+        mock_psutil_module.net_if_addrs.side_effect = mock_psutil_module.Error("Net if addrs error")
+        with patch(
+            "equus_express.client.socket.gethostbyname",
+            side_effect=socket.gaierror("Hostname error")
+        ):
+            telemetry = agent._collect_telemetry()
+            assert "ip_address: Hostname error" in telemetry["application"]["last_error"]
+            assert telemetry["network"]["ip_address"] == "error"
 
 
 def test_device_agent_collect_telemetry_ip_address_socket_error(mock_device_agent_dependencies):
     """Test _collect_telemetry handles IP address errors from socket fallback."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
     agent = DeviceAgent(mock_client)
-    with patch(
-        "equus_express.client.psutil.net_if_addrs",
-        # Simulates psutil not finding IP or erroring, forcing fallback
-        side_effect=psutil.Error("Simulate psutil not finding IP"),
-    ), patch(
-        "equus_express.client.socket.gethostbyname",
-        side_effect=socket.gaierror("gethostbyname error"),
-    ):
-        telemetry = agent._collect_telemetry()
-        assert "ip_address: gethostbyname error" in telemetry["application"]["last_error"]
-        assert telemetry["network"]["ip_address"] == "error"
+    # To test psutil error without installing psutil, we mock the module itself
+    with patch("equus_express.client.psutil") as mock_psutil_module:
+        mock_psutil_module.Error = RuntimeError # Define a mock Error type for psutil
+        mock_psutil_module.net_if_addrs.side_effect = mock_psutil_module.Error("Simulate psutil not finding IP")
+        with patch(
+            "equus_express.client.socket.gethostbyname",
+            side_effect=socket.gaierror("gethostbyname error"),
+        ):
+            telemetry = agent._collect_telemetry()
+            assert "ip_address: gethostbyname error" in telemetry["application"]["last_error"]
+            assert telemetry["network"]["ip_address"] == "error"
