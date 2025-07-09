@@ -834,14 +834,12 @@ def _patch_sys_argv(monkeypatch):
     sys.argv = original_argv # Ensure sys.argv is restored after test
 
 
-def test_main_no_arguments(mocker, capsys, _patch_sys_argv):
+def test_main_no_arguments(monkeypatch, capsys, _patch_sys_argv):
     """Test main function exits with error if no arguments are provided."""
-    mocker.patch.object(sys, 'argv', ["secure_client.py"])
+    monkeypatch.setattr(sys, 'argv', ["secure_client.py"])
 
     with pytest.raises(SystemExit) as excinfo:
-        from equus_express.client import main
-        main()
-
+        from equus_express.client import main; main()
     assert excinfo.value.code == 1
     captured = capsys.readouterr()
     assert "Usage: python3 secure_client.py <secure_server_url> [device_id]" in captured.out
@@ -850,27 +848,23 @@ def test_main_no_arguments(mocker, capsys, _patch_sys_argv):
 def test_main_agent_start_failure(mocker, mock_device_agent_dependencies, caplog, _patch_sys_argv):
     """Test main function exits if device agent fails to start."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
-    mock_client.test_connection.return_value = False # Force agent.start() to fail
+    mock_client.test_connection.return_value = False  # Force agent.start() to fail
 
-    mocker.patch.object(sys, 'argv', ["secure_client.py", TEST_BASE_URL, TEST_DEVICE_ID])
-
-    with caplog.at_level(logging.ERROR):
-        with pytest.raises(SystemExit) as excinfo:
-            from equus_express.client import main
-            main()
+    with patch.object(sys, 'argv', ["secure_client.py", TEST_BASE_URL, TEST_DEVICE_ID]):
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(SystemExit) as excinfo:
+                from equus_express.client import main; main()
     assert excinfo.value.code == 1
     assert "Failed to start device agent" in caplog.text
 
 
-def test_main_client_init_critical_error(mocker, mock_crypto, mock_httpx_client, tmp_key_dir, caplog, _patch_sys_argv):
+def test_main_client_init_critical_error(mock_crypto, mock_httpx_client, tmp_key_dir, caplog, _patch_sys_argv):
     """Test main function exits on critical client initialization error."""
-    mock_crypto["mock_os_makedirs"].side_effect = OSError("Critical init error") # Simulate error during key setup
-
-    with caplog.at_level(logging.ERROR):
-        mocker.patch.object(sys, 'argv', ["secure_client.py", TEST_BASE_URL, TEST_DEVICE_ID])
-        with pytest.raises(SystemExit) as excinfo:
-            from equus_express.client import main
-            main()
+    mock_crypto["mock_os_makedirs"].side_effect = OSError("Critical init error")  # Simulate error during key setup
+    with patch.object(sys, 'argv', ["secure_client.py", TEST_BASE_URL, TEST_DEVICE_ID]):
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(SystemExit) as excinfo:
+                from equus_express.client import main; main()
     assert excinfo.value.code == 1
     assert "A critical client error occurred: Failed to initialize client keys: Critical init error" in caplog.text
 
@@ -889,29 +883,25 @@ def test_main_telemetry_loop_unhandled_exception(mocker, mock_device_agent_depen
     # Patch run_telemetry_loop directly to raise the exception, forcing main's outer except block
     # to be called, which then triggers sys.exit(1).
     with patch('equus_express.client.DeviceAgent.run_telemetry_loop', side_effect=Exception("Simulated unhandled loop error")) as mock_run_loop:
-        mocker.patch.object(sys, 'argv', ["secure_client.py", TEST_BASE_URL, TEST_DEVICE_ID])
+        with patch.object(sys, 'argv', ["secure_client.py", TEST_BASE_URL, TEST_DEVICE_ID]):
+            with caplog.at_level(logging.CRITICAL):
+                with pytest.raises(SystemExit) as excinfo:
+                    from equus_express.client import main; main()
 
-        with caplog.at_level(logging.CRITICAL):
-            with pytest.raises(SystemExit) as excinfo:
-                from equus_express.client import main
-                main()
-
-        assert excinfo.value.code == 1
-        assert "An unexpected error occurred in the main client process: Simulated unhandled loop error" in caplog.text
-        # The agent.stop() is called in main's finally block
-        mock_client.update_status.assert_called_with("offline", {"shutdown_time": mock_device_agent_dependencies["fixed_now_iso"]})
+            assert excinfo.value.code == 1
+            assert "An unexpected error occurred in the main client process: Simulated unhandled loop error" in caplog.text
+            # The agent.stop() is called in main's finally block
+            mock_client.update_status.assert_called_with("offline", {"shutdown_time": mock_device_agent_dependencies["fixed_now_iso"]})
 
 
-def test_main_unexpected_error(mocker, caplog, _patch_sys_argv):
+def test_main_unexpected_error(caplog, _patch_sys_argv):
     """Test main function handles unexpected general exceptions."""
-    mocker.patch.object(sys, 'argv', ["secure_client.py", TEST_BASE_URL, TEST_DEVICE_ID])
-
     # Mock SecureAPIClient constructor to raise an unexpected error
     with patch("equus_express.client.SecureAPIClient", side_effect=Exception("Unexpected client error")):
-        with caplog.at_level(logging.CRITICAL):
-            with pytest.raises(SystemExit) as excinfo:
-                from equus_express.client import main
-                main()
+        with patch.object(sys, 'argv', ["secure_client.py", TEST_BASE_URL, TEST_DEVICE_ID]):
+            with caplog.at_level(logging.CRITICAL):
+                with pytest.raises(SystemExit) as excinfo:
+                    from equus_express.client import main; main()
     assert excinfo.value.code == 1
     # Check that the log message containing the unexpected error is present
     assert "An unexpected error occurred in the main client process: Unexpected client error" in caplog.text

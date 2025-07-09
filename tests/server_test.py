@@ -543,7 +543,7 @@ def test_lifespan_static_file_extraction_path():
     with patch('equus_express.server.pkg_resources.files') as mock_pkg_files:
         mock_resource = MagicMock()
         mock_resource.is_dir.return_value = False # Force extraction
-        mock_resource.iterdir.return_value = [MagicMock(name='app.js', spec=['name']), MagicMock(name='style.css', spec=['name'])] # Simulate files to copy
+        mock_resource.iterdir.return_value = [MagicMock(name='app.js', is_dir=MagicMock(return_value=False), spec=['name', 'is_dir', 'read_bytes']), MagicMock(name='style.css', is_dir=MagicMock(return_value=False), spec=['name', 'is_dir', 'read_bytes'])] # Simulate files to copy
         mock_pkg_files.return_value.joinpath.return_value = mock_resource
 
         mock_as_file_context = MagicMock()
