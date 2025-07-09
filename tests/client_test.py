@@ -3,75 +3,86 @@ import os
 import shutil
 import json
 from unittest.mock import patch, MagicMock, mock_open
-from datetime import datetime, timezone # Import datetime and timezone
+from datetime import datetime, timezone
 import time
-import httpx # Changed from requests
+import httpx
 
 # Import the classes to be tested
 from equus_express.client import SecureAPIClient, DeviceAgent
+
 
 # Constants for testing
 TEST_BASE_URL = "http://mock-server"
 TEST_DEVICE_ID = "test_client_device"
 MOCK_PUBLIC_KEY_PEM = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsdfadsfadsfasdfasdf\n-----END PUBLIC KEY-----\n"
+MOCK_PRIVATE_KEY_PEM = b"-----BEGIN PRIVATE KEY-----MOCK_PRIVATE_KEY-----END PRIVATE KEY-----"
 
 
 @pytest.fixture
 def tmp_key_dir(tmp_path):
     """Fixture to create a temporary directory for client keys and clean up after."""
     key_dir = tmp_path / "test_keys"
-    key_dir.mkdir()
+    # No need to create directory, client.py's os.makedirs will be mocked
     yield str(key_dir)
-    # No need for explicit cleanup, tmp_path fixture handles it.
 
 
 @pytest.fixture
 def mock_crypto():
-    """Fixture to mock cryptography functions for key generation/loading."""
+    """Fixture to mock cryptography functions and file I/O for key generation/loading."""
+    m_open = mock_open()
+
+    # Configure mock_private_key and mock_public_key objects
+    mock_private_key = MagicMock()
+    mock_public_key = MagicMock()
+    mock_private_key.public_key.return_value = mock_public_key
+    mock_public_key.public_bytes.return_value = MOCK_PUBLIC_KEY_PEM.encode("utf-8")
+    mock_private_key.private_bytes.return_value = MOCK_PRIVATE_KEY_PEM
+
+    # Configure mock_open for reading (for secure_client_keys_exist scenario)
+    # The read content depends on the order of reads. The client reads private then public.
+    m_open.return_value.__enter__.return_value.read.side_effect = [
+        MOCK_PRIVATE_KEY_PEM,
+        MOCK_PUBLIC_KEY_PEM.encode("utf-8"),
+    ]
+
     with (
         patch(
             "equus_express.client.rsa.generate_private_key"
         ) as mock_generate_private_key,
         patch(
             "equus_express.client.serialization"
-        ) as mock_serialization, # Patch the entire serialization module
+        ) as mock_serialization,
         patch(
             "equus_express.client.default_backend"
         ) as mock_default_backend,
+        patch("equus_express.client.open", m_open),
+        patch("equus_express.client.os.path.exists") as mock_os_path_exists,
+        patch("equus_express.client.os.makedirs") as mock_os_makedirs
     ):
         # Configure mock_serialization to behave like the actual module
-        # Provide mock objects for its attributes/enums
         mock_serialization.Encoding.PEM = MagicMock(name="Encoding.PEM_mock")
-        mock_serialization.NoEncryption.return_value = MagicMock(name="NoEncryption_mock") # Return a mock instance
+        mock_serialization.NoEncryption.return_value = MagicMock(name="NoEncryption_mock")
         mock_serialization.PrivateFormat.PKCS8 = MagicMock(name="PrivateFormat.PKCS8_mock")
         mock_serialization.PublicFormat.SubjectPublicKeyInfo = MagicMock(name="PublicFormat.SubjectPublicKeyInfo_mock")
 
-        # Mock a private key object and its public_key method
-        mock_private_key = MagicMock()
-        mock_public_key = MagicMock()
-        mock_private_key.public_key.return_value = mock_public_key
-        mock_public_key.public_bytes.return_value = MOCK_PUBLIC_KEY_PEM.encode(
-            "utf-8"
-        )
-        mock_private_key.private_bytes.return_value = (
-            b"-----BEGIN PRIVATE KEY-----MOCK-----END PRIVATE KEY-----"
-        )
-
         mock_generate_private_key.return_value = mock_private_key
-        mock_serialization.load_pem_private_key.return_value = mock_private_key # Connect to mock_serialization
+        mock_serialization.load_pem_private_key.return_value = mock_private_key
 
         yield {
             "mock_generate_private_key": mock_generate_private_key,
-            "mock_serialization": mock_serialization, # Yield the patched serialization module
+            "mock_serialization": mock_serialization,
             "mock_private_key": mock_private_key,
             "mock_public_key": mock_public_key,
+            "mock_open": m_open,
+            "mock_os_path_exists": mock_os_path_exists,
+            "mock_os_makedirs": mock_os_makedirs,
         }
 
 
 @pytest.fixture
 def mock_httpx_client():
     """Fixture to mock httpx.Client."""
-    with patch("equus_express.client.httpx.Client") as MockClient: # Removed src.
+    with patch("equus_express.client.httpx.Client") as MockClient:
         mock_client_instance = MockClient.return_value
         # Default mock response for success
         mock_response = MagicMock()
@@ -91,40 +102,45 @@ def mock_httpx_client():
 def secure_client_no_keys_exist(
     tmp_key_dir, mock_crypto, mock_httpx_client
 ):
-    """SecureAPIClient instance where no keys exist initially."""
-    with (
-        patch(
-            "equus_express.client.os.path.exists",
-            side_effect=[False, False],
-        ),
-        patch("equus_express.client.os.makedirs"),
-    ):
-        client = SecureAPIClient(
-            base_url=TEST_BASE_URL,
-            device_id=TEST_DEVICE_ID,
-            key_dir=tmp_key_dir,
-        )
-        yield client
+    """SecureAPIClient instance where no keys exist initially, simulating key generation."""
+    # Configure mock_os_path_exists to return False for both key files checks
+    mock_crypto["mock_os_path_exists"].side_effect = [False, False]
+    
+    # os.makedirs is already patched in mock_crypto fixture, and client.py now calls it.
+    client = SecureAPIClient(
+        base_url=TEST_BASE_URL,
+        device_id=TEST_DEVICE_ID,
+        key_dir=tmp_key_dir, # Ensure tmp_key_dir is passed
+    )
+    yield client
+    # Assert that os.makedirs was called for the key_dir
+    mock_crypto["mock_os_makedirs"].assert_called_with(tmp_key_dir, exist_ok=True)
+    # Assert that keys were attempted to be written via mocked open
+    assert mock_crypto["mock_open"].call_args_list[0].args[0] == os.path.join(tmp_key_dir, "device.pem")
+    assert mock_crypto["mock_open"].call_args_list[1].args[0] == os.path.join(tmp_key_dir, "device.pub")
 
 
 @pytest.fixture
 def secure_client_keys_exist(tmp_key_dir, mock_crypto, mock_httpx_client):
-    """SecureAPIClient instance where keys already exist."""
-    # Simulate files existing
-    with open(os.path.join(tmp_key_dir, "device.pem"), "wb") as f:
-        f.write(b"dummy private key")
-    with open(os.path.join(tmp_key_dir, "device.pub"), "wb") as f:
-        f.write(b"dummy public key")
-
-    with patch(
-        "equus_express.client.os.path.exists", side_effect=[True, True]
-    ):  # First call for private, second for public
-        client = SecureAPIClient(
-            base_url=TEST_BASE_URL,
-            device_id=TEST_DEVICE_ID,
-            key_dir=tmp_key_dir,
-        )
-        yield client
+    """SecureAPIClient instance where keys already exist, simulating key loading."""
+    # Configure mock_os_path_exists to return True for both key files checks
+    mock_crypto["mock_os_path_exists"].side_effect = [True, True]
+    
+    # No need to physically create dummy files as 'open' is mocked.
+    # The 'mock_open' in 'mock_crypto' already provides read content for two reads.
+    client = SecureAPIClient(
+        base_url=TEST_BASE_URL,
+        device_id=TEST_DEVICE_ID,
+        key_dir=tmp_key_dir, # Ensure tmp_key_dir is passed
+    )
+    yield client
+    # Assert that os.makedirs was called for the key_dir (even if it exists)
+    mock_crypto["mock_os_makedirs"].assert_called_with(tmp_key_dir, exist_ok=True)
+    # Assert that keys were attempted to be read via mocked open
+    assert mock_crypto["mock_open"].call_args_list[0].args[0] == os.path.join(tmp_key_dir, "device.pem")
+    assert mock_crypto["mock_open"].call_args_list[1].args[0] == os.path.join(tmp_key_dir, "device.pub")
+    # Verify load_pem_private_key was called, indicating successful key loading path
+    mock_crypto["mock_serialization"].load_pem_private_key.assert_called_once()
 
 
 @pytest.fixture
@@ -439,9 +455,15 @@ def test_device_agent_run_telemetry_loop(mock_device_agent_dependencies):
         # The side_effect of mock_sleep will cause the loop to terminate.
         agent.run_telemetry_loop(interval=1)
 
-    assert mock_client.send_telemetry.call_count == 2
-    mock_sleep.assert_any_call(1)  # Ensure sleep was called with interval
-    assert agent.running is True # The loop exits, but the 'running' flag is not changed by the loop itself.
+    # The loop executes its body THEN sleeps.
+    # Iteration 1: send_telemetry, then sleep (returns None)
+    # Iteration 2: send_telemetry, then sleep (returns None)
+    # Iteration 3: send_telemetry, then sleep (raises KeyboardInterrupt, breaking loop)
+    # So, send_telemetry is called 3 times.
+    assert mock_client.send_telemetry.call_count == 3
+    mock_sleep.assert_any_call(1)
+    # The 'running' flag is not changed by the loop itself upon KeyboardInterrupt
+    assert agent.running is True
 
 
 def test_device_agent_collect_telemetry(mock_device_agent_dependencies):
