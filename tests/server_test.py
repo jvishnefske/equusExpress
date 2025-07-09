@@ -468,5 +468,7 @@ def test_lifespan_static_file_setup_error():
     # Mock tempfile.TemporaryDirectory to raise an error
     with patch("equus_express.server.tempfile.TemporaryDirectory", side_effect=OSError("Temp dir error")):
         with pytest.raises(RuntimeError, match="Failed to initialize static file serving"):
-            # Create a new TestClient instance for the temporary app
-            TestClient(temp_app)
+            # Use TestClient as a context manager to ensure lifespan startup is fully executed and errors propagated
+            with TestClient(temp_app) as client:
+                # No actual requests needed, just the startup part is tested
+                pass
