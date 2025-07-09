@@ -15,16 +15,28 @@ from pydantic import BaseModel
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 import socket
+from contextlib import asynccontextmanager # New import
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Secure IoT API Server")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Handles startup and shutdown events for the application.
+    Initializes the database on startup.
+    """
+    logger.info("Application starting up...")
+    init_secure_db()
+    yield
+    logger.info("Application shutting down...")
+
+app = FastAPI(title="Secure IoT API Server", lifespan=lifespan) # Updated FastAPI init
 security = HTTPBearer()
 
 # Initialize Jinja2Templates
-templates = Jinja2Templates(directory="templates") # New line
+templates = Jinja2Templates(directory="templates")
 
 # Mount a static directory to serve files like favicon.ico
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -237,11 +249,6 @@ def register_or_update_device(device_id: str, public_key: str, ip_address: str):
 
     except Exception as e:
         logger.error(f"Failed to register/update device {device_id}: {e}")
-
-
-@app.on_event("startup")
-async def startup_event():
-    init_secure_db()
 
 
 @app.get("/")
