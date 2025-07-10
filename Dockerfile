@@ -19,7 +19,7 @@ WORKDIR /app
 
 # Copy project files
 COPY pyproject.toml README.md ./
-COPY equus_express/ ./equus_express/
+COPY src/ ./src/
 
 # Install Python dependencies and the package
 RUN pip install --upgrade pip && \
