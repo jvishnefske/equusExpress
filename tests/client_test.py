@@ -623,32 +623,38 @@ def test_device_agent_run_telemetry_loop_communication_error(mock_device_agent_d
     assert mock_client.send_telemetry.call_count == 2 # First call fails, second succeeds
     mock_sleep.assert_called_with(1) # Should sleep after error
 
-@pytest.mark.skip
-        with patch("equus_express.client.DeviceAgent._collect_telemetry", return_value={"mock_data": 123}):
-            agent.run_telemetry_loop(interval=1)
-
-    mock_error.assert_called_once_with(
-        "Telemetry loop communication or data error: Simulated connection error"
-    )
-    assert mock_client.send_telemetry.call_count == 2
-    assert mock_sleep.call_count == 1 # Sleep is called after the first error, but not after the second success as loop terminates.
-    mock_sleep.assert_called_with(1)
-    assert agent.running is False
-
-
 def test_device_agent_run_telemetry_loop_unexpected_error(mock_device_agent_dependencies):
     """Test telemetry loop handles unexpected general errors."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
     mock_sleep = mock_device_agent_dependencies["mock_sleep"]
     agent = DeviceAgent(mock_client)
 
-    with patch('equus_express.client.logger.exception') as mock_exception_logger:
-        agent.run_telemetry_loop(interval=1)
+    agent.running = True
 
-    mock_exception_logger.assert_called_once()
-    assert "An unexpected error occurred in telemetry loop: Unexpected data format" in mock_exception_logger.call_args[0][0]
+    call_count = 0
+    def error_then_stop(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise ValueError("Unexpected data format") # Simulate an unexpected error
+        elif call_count == 2:
+            agent.running = False # Stop after the second call
+            return {"status": "success"}
+
+    mock_client.send_telemetry.side_effect = error_then_stop
+
+    with patch('equus_express.client.logger.exception') as mock_exception_logger:
+        with patch("equus_express.client.DeviceAgent._collect_telemetry", return_value={"mock_data": 123}):
+            agent.run_telemetry_loop(interval=1)
+
+    mock_exception_logger.assert_called_once_with(
+        "An unexpected error occurred in telemetry loop: %s", "Unexpected data format"
+    )
     assert mock_client.send_telemetry.call_count == 2
+    assert mock_sleep.call_count == 1 # Sleep is called after the first error, but not after the second success as loop terminates.
     mock_sleep.assert_called_with(1)
+    assert agent.running is False
+
 
 
 def test_device_agent_collect_telemetry(mock_device_agent_dependencies):
