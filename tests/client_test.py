@@ -552,7 +552,7 @@ def test_device_agent_stop(mock_device_agent_dependencies):
         },  # Use the fixed timestamp for assertion
     )
 
-@pytest.mark.skip
+
 def test_device_agent_run_telemetry_loop(mock_device_agent_dependencies):
     """Test telemetry loop sends data at intervals."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -560,8 +560,18 @@ def test_device_agent_run_telemetry_loop(mock_device_agent_dependencies):
     agent = DeviceAgent(mock_client)
 
     agent.running = True
-    # Run loop briefly for 2 iterations
-    mock_sleep.side_effect = [None, None, KeyboardInterrupt]
+
+    # Mock _collect_telemetry for predictable data
+    # Define a side effect function for send_telemetry to stop the loop after N calls
+    call_count = 0
+    def stop_after_n_calls(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count >= 3: # Stop after 3 telemetry sends
+            agent.running = False # Set running to False to exit the loop
+        return {"status": "success"}
+
+    mock_client.send_telemetry.side_effect = stop_after_n_calls
 
     # Mock _collect_telemetry for predictable data
     with patch(
@@ -570,19 +580,20 @@ def test_device_agent_run_telemetry_loop(mock_device_agent_dependencies):
     ):
         # The loop handles KeyboardInterrupt internally, so we don't expect it to be re-raised.
         # The side_effect of mock_sleep will cause the loop to terminate.
+        # Now, the agent.running flag will terminate it cleanly.
         agent.run_telemetry_loop(interval=1)
 
     # The loop executes its body THEN sleeps.
     # Iteration 1: send_telemetry, then sleep (returns None)
     # Iteration 2: send_telemetry, then sleep (returns None)
-    # Iteration 3: send_telemetry, then sleep (raises KeyboardInterrupt, breaking loop)
-    # So, send_telemetry is called 3 times.
+    # Iteration 3: send_telemetry (sets agent.running = False), loop breaks before sleep.
     assert mock_client.send_telemetry.call_count == 3
-    mock_sleep.assert_any_call(1)
-    # The 'running' flag is not changed by the loop itself upon KeyboardInterrupt
-    assert agent.running is True
+    # Sleep should be called after the first two telemetry sends, but not after the third.
+    assert mock_sleep.call_count == 2
+    mock_sleep.assert_called_with(1) # Verify the interval
+    assert agent.running is False # Verify the agent stopped cleanly
 
-@pytest.mark.skip
+
 def test_device_agent_run_telemetry_loop_communication_error(mock_device_agent_dependencies):
     """Test telemetry loop handles client communication errors."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -590,11 +601,18 @@ def test_device_agent_run_telemetry_loop_communication_error(mock_device_agent_d
     agent = DeviceAgent(mock_client)
 
     agent.running = True
-    mock_sleep.side_effect = [None, KeyboardInterrupt] # Two iterations
-    mock_client.send_telemetry.side_effect = [
-        httpx.ConnectError("Simulated connection error"),
-        None, # Second call succeeds
-    ]
+
+    call_count = 0
+    def error_then_stop(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise httpx.ConnectError("Simulated connection error")
+        elif call_count == 2:
+            agent.running = False # Stop after the second call
+            return {"status": "success"}
+
+    mock_client.send_telemetry.side_effect = error_then_stop
 
     with patch('equus_express.client.logger.error') as mock_error:
         agent.run_telemetry_loop(interval=1)
@@ -606,18 +624,23 @@ def test_device_agent_run_telemetry_loop_communication_error(mock_device_agent_d
     mock_sleep.assert_called_with(1) # Should sleep after error
 
 @pytest.mark.skip
+        with patch("equus_express.client.DeviceAgent._collect_telemetry", return_value={"mock_data": 123}):
+            agent.run_telemetry_loop(interval=1)
+
+    mock_error.assert_called_once_with(
+        "Telemetry loop communication or data error: Simulated connection error"
+    )
+    assert mock_client.send_telemetry.call_count == 2
+    assert mock_sleep.call_count == 1 # Sleep is called after the first error, but not after the second success as loop terminates.
+    mock_sleep.assert_called_with(1)
+    assert agent.running is False
+
+
 def test_device_agent_run_telemetry_loop_unexpected_error(mock_device_agent_dependencies):
     """Test telemetry loop handles unexpected general errors."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
     mock_sleep = mock_device_agent_dependencies["mock_sleep"]
     agent = DeviceAgent(mock_client)
-
-    agent.running = True
-    mock_sleep.side_effect = [None, KeyboardInterrupt] # Two iterations
-    mock_client.send_telemetry.side_effect = [
-        ValueError("Unexpected data format"),
-        None, # Second call succeeds
-    ]
 
     with patch('equus_express.client.logger.exception') as mock_exception_logger:
         agent.run_telemetry_loop(interval=1)
