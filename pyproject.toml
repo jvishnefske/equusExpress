@@ -20,3 +20,25 @@ dev = [
     "coverage>=7.9.2",
     "pytest-cov>=6.2.1",
 ]
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "yarn.build"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "equus-express"
+version = "0.1.0"
+description = "Secure IoT API Server and Device Agent"
+readme = "README.md" # Assumes a README.md at the project root
+authors = [{name = "Your Name", email = "your@email.com"}] # Replace with actual author info
+license = {file = "LICENSE"} # Assumes a LICENSE file at the project root
+requires-python = ">=3.9"
+dependencies = [
+    # Add your Python runtime dependencies here, e.g.:
+    # "fastapi", "uvicorn", "httpx", "cryptography", "sqlalchemy", "pydantic", "jinja2", "python-multipart", "psutil"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"equus_express" = ["static/*", "templates/*"] # Ensure built static files are included in the wheel
