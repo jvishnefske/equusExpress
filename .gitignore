@@ -55,3 +55,5 @@ venv.bak/
 
 .aider*
 secure_devices.db
+letsencrypt
+*.sw[po]
