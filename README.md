@@ -38,6 +38,11 @@ This guide walks you through setting up a complete certificate provisioning syst
 -   `cryptography` library for key generation
 -   Network connectivity to the server (or proxy)
 
+## Docker Compose Environment Variables 🐳
+
+For Docker Compose deployments, environment variables (e.g., `HOSTNAME`, `LETSENCRYPT_EMAIL`, `CF_API_KEY`) can be configured by creating a `.env` file in the same directory as your `docker-compose.yml`. Docker Compose automatically loads variables from this file.
+
+
 ## Getting Started
 
 ### 1. Install Dependencies 📦
