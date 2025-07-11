@@ -4,7 +4,6 @@ services:
     environment:
       - DOMAIN=${DOMAIN}
     build: .
-    container_name: fastapi-app
     restart: unless-stopped
     expose:
       - 8000
@@ -16,6 +15,7 @@ services:
       - "traefik.http.routers.fastapi.entrypoints=websecure"
       - "traefik.http.routers.fastapi.tls.certresolver=letsencrypt"
       - "traefik.http.services.fastapi.loadbalancer.server.port=8000"
+      - "traefik.http.routers.fastapi.service=fastapi@docker"
 
   traefik:
     image: traefik:v3.0
