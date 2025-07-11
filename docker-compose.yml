@@ -40,7 +40,8 @@ services:
       
       # Docker provider
       - --providers.docker=true
-      #- --providers.docker.exposedbydefault=false
+      - --providers.docker.exposedbydefault=false
+
       
       # SSL certificates
       - --certificatesresolvers.letsencrypt.acme.email=${LETSENCRYPT_EMAIL}
