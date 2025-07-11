@@ -18,6 +18,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.fastapi.rule=Host(`${HOSTNAME:-localhost}`)"
+      - "traefik.http.services.fastapi.loadbalancer.server.port=8000"
       - "traefik.http.routers.fastapi.entrypoints=web"
       - "traefik.http.routers.fastapi-secure.rule=Host(`${HOSTNAME:-localhost}`)"
       - "traefik.http.routers.fastapi-secure.entrypoints=websecure"
