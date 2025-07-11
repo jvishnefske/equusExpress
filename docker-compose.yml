@@ -57,12 +57,12 @@ services:
       
       # Logging
       - --log.level=INFO
-    #labels:
-    #  - traefik.enable=true
-    #  - traefik.http.routers.dashboard.rule=Host(`traefik.${DOMAIN}`)
-    #  - traefik.http.routers.dashboard.entrypoints=websecure
-    #  - traefik.http.routers.dashboard.tls.certresolver=letsencrypt
-    #  - traefik.http.routers.dashboard.service=api@internal
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dashboard.rule=Host(`traefik.${DOMAIN}`)
+      - traefik.http.routers.dashboard.entrypoints=websecure
+      - traefik.http.routers.dashboard.tls.certresolver=letsencrypt
+      - traefik.http.routers.dashboard.service=api@internal
 
 #networks:
 #  web:
