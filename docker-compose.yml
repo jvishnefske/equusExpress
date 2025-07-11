@@ -60,6 +60,9 @@ services:
       # - CF_DNS_API_TOKEN=your-cloudflare-dns-api-token
       - TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_DNSCHALLENGE_PROVIDER=${DNS_CHALLENGE_PROVIDER:-cloudflare}
       - TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL=${LETSENCRYPT_EMAIL:-change@example.com}
+      - TRAEFIK_ACCESSLOG=false
+      - TRAEFIK_API=true
+      -
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - letsencrypt:/letsencrypt
