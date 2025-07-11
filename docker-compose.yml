@@ -1,5 +1,4 @@
-version: '3.8'
-
+---
 services:
   fastapi:
     build: .
@@ -16,7 +15,13 @@ services:
     # Uncomment if you need to mount local files
     # volumes: # Keep this commented by default
     #   - ./app:/app 
-
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.fastapi.rule=Host(`${HOSTNAME:-localhost}`)"
+      - "traefik.http.routers.fastapi.entrypoints=web"
+      - "traefik.http.routers.fastapi-secure.rule=Host(`${HOSTNAME:-localhost}`)"
+      - "traefik.http.routers.fastapi-secure.entrypoints=websecure"
+      - "traefik.http.routers.fastapi-secure.tls.certresolver=letsencrypt"
   traefik:
     image: traefik:v2.10
     container_name: traefik
