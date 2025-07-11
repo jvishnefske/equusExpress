@@ -8,8 +8,8 @@ services:
     restart: unless-stopped
     expose:
       - 8000
-    #networks:
-    #  - web
+    networks:
+      - web
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.fastapi.rule=Host(`${DOMAIN}`)"
@@ -30,8 +30,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik-data:/data
-    #networks:
-    #  - web
+    networks:
+      - web
     command:
       # Entry points
       - --entrypoints.web.address=:80
@@ -64,6 +64,6 @@ services:
       - traefik.http.routers.dashboard.tls.certresolver=letsencrypt
       - traefik.http.routers.dashboard.service=api@internal
 
-#networks:
-#  web:
-#    driver: bridge
+networks:
+  web:
+    driver: bridge
