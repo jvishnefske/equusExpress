@@ -58,7 +58,7 @@ services:
       - --api.insecure=true
       
       # Logging
-      - --log.level=INFO
+      - --log.level=DEBUG
     labels:
       - traefik.enable=true
       - traefik.http.routers.dashboard.rule=Host(`traefik.${DOMAIN}`)
