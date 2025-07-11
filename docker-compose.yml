@@ -79,7 +79,6 @@ services:
       - "traefik.http.routers.dashboard-https.rule=Host(`${HOSTNAME}`)"
       - "traefik.http.routers.dashboard-https.entrypoints=websecure"
       - "traefik.http.routers.dashboard-https.tls.certresolver=letsencrypt" # This will only work if ENABLE_SSL is true
-      - "traefik.http.routers.dashboard-https.tls.challenge.dns=true" # Explicitly specify DNS challenge
       - "traefik.http.routers.dashboard-https.service=api@internal"
 
 networks:
