@@ -626,7 +626,7 @@ def test_device_agent_run_telemetry_loop_communication_error(mock_device_agent_d
         "Telemetry loop communication or data error: Simulated connection error"
     )
     assert mock_client.send_telemetry.call_count == 2
-    assert mock_sleep.call_count == 1 # Sleep is called after the first error, but not after the second success as loop terminates.
+    assert mock_sleep.call_count == 2 # Sleep is called after each of the two telemetry sends before loop terminates.
     mock_sleep.assert_called_with(1)
     assert agent.running is False
 
@@ -660,7 +660,7 @@ def test_device_agent_run_telemetry_loop_unexpected_error(mock_device_agent_depe
         "An unexpected error occurred in telemetry loop: Unexpected data format"
     )
     assert mock_client.send_telemetry.call_count == 2
-    assert mock_sleep.call_count == 1 # Sleep is called after the first error, but not after the second success as loop terminates.
+    assert mock_sleep.call_count == 2 # Sleep is called after each of the two telemetry sends before loop terminates.
     mock_sleep.assert_called_with(1)
     assert agent.running is False
 
