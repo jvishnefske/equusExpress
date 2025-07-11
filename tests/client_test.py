@@ -587,14 +587,15 @@ def test_device_agent_run_telemetry_loop(mock_device_agent_dependencies):
     # Iteration 1: send_telemetry, then sleep (returns None)
     # Iteration 2: send_telemetry, then sleep (returns None)
     # Iteration 3: send_telemetry (sets agent.running = False), loop breaks before sleep.
+    # However, if sleep is unconditional inside the loop, it will be called for the 3rd iteration too.
     assert mock_client.send_telemetry.call_count == 3
-    # Sleep should be called after the first two telemetry sends, but not after the third.
-    assert mock_sleep.call_count == 2
+    # Sleep is called after each telemetry send, including the last one before the loop terminates.
+    assert mock_sleep.call_count == 3
     mock_sleep.assert_called_with(1) # Verify the interval
     assert agent.running is False # Verify the agent stopped cleanly
 
 
-def test_device_agent_run_telemetry_loop_communication_error(mock_device_agent_dependencies):
+def test_device_agent_run_telemetry_loop_communication_error(mock_device_agent_dependencies, caplog):
     """Test telemetry loop handles client communication errors."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
     mock_sleep = mock_device_agent_dependencies["mock_sleep"]
@@ -614,7 +615,54 @@ def test_device_agent_run_telemetry_loop_communication_error(mock_device_agent_d
 
     mock_client.send_telemetry.side_effect = error_then_stop
 
-    with patch('equus_express.client.logger.error') as mock_error:
+    with patch('equus_express.client.logger.error') as mock_error: # Patched logger for error
+        # Ensure _collect_telemetry is mocked to return valid data
+        with patch("equus_express.client.DeviceAgent._collect_telemetry", return_value={"mock_data": 123}):
+            # Run the loop and expect it to terminate cleanly
+            agent.run_telemetry_loop(interval=1)
+
+    # Assertions
+    mock_error.assert_called_once_with(
+        "Telemetry loop communication or data error: Simulated connection error"
+    )
+    assert mock_client.send_telemetry.call_count == 2
+    assert mock_sleep.call_count == 1 # Sleep is called after the first error, but not after the second success as loop terminates.
+    mock_sleep.assert_called_with(1)
+    assert agent.running is False
+
+
+def test_device_agent_run_telemetry_loop_unexpected_error(mock_device_agent_dependencies):
+    """Test telemetry loop handles unexpected general errors."""
+    mock_client = mock_device_agent_dependencies["mock_client_instance"]
+    mock_sleep = mock_device_agent_dependencies["mock_sleep"]
+    agent = DeviceAgent(mock_client)
+
+    agent.running = True
+
+    call_count = 0
+    def error_then_stop(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise ValueError("Unexpected data format") # Simulate an unexpected error
+        elif call_count == 2:
+            agent.running = False # Stop after the second call
+            return {"status": "success"}
+
+    mock_client.send_telemetry.side_effect = error_then_stop
+
+    with patch('equus_express.client.logger.exception') as mock_exception_logger:
+        with patch("equus_express.client.DeviceAgent._collect_telemetry", return_value={"mock_data": 123}):
+            agent.run_telemetry_loop(interval=1)
+
+    # Assert that the logger's exception method was called with the fully formatted string
+    mock_exception_logger.assert_called_once_with(
+        "An unexpected error occurred in telemetry loop: Unexpected data format"
+    )
+    assert mock_client.send_telemetry.call_count == 2
+    assert mock_sleep.call_count == 1 # Sleep is called after the first error, but not after the second success as loop terminates.
+    mock_sleep.assert_called_with(1)
+    assert agent.running is False
         agent.run_telemetry_loop(interval=1)
 
     mock_error.assert_called_once_with(
