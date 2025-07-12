@@ -12,7 +12,7 @@ services:
       - web
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.fastapi.rule=Host(`${DOMAIN}`) && PathPrefix(`/`)"
+      - "traefik.http.routers.fastapi.rule=Host(`${DOMAIN}`)"
       - "traefik.http.routers.fastapi.entrypoints=websecure"
       - "traefik.http.routers.fastapi.tls.certresolver=letsencrypt"
 
@@ -69,3 +69,6 @@ services:
 networks:
   web:
     driver: bridge
+
+volumes:
+  traefik-data:
