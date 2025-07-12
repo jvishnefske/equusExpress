@@ -36,7 +36,6 @@ services:
       # Entry points
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
-      - --entrypoints.websecure.http2
       - --entrypoints.websecure.http3
 
       # Docker provider
