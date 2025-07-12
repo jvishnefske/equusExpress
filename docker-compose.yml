@@ -36,18 +36,18 @@ services:
       # Entry points
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
-      
+      - --entrypoints.websecure.http2
+      - --entrypoints.websecure.http3
+
       # Docker provider
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
 
-      
       # SSL certificates
       - --certificatesresolvers.letsencrypt.acme.email=${LETSENCRYPT_EMAIL}
       - --certificatesresolvers.letsencrypt.acme.storage=/data/acme.json
       - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
 
-      
       # HTTP to HTTPS redirect
       - --entrypoints.web.http.redirections.entrypoint.to=websecure
       - --entrypoints.web.http.redirections.entrypoint.scheme=https
@@ -57,7 +57,7 @@ services:
       - --api.insecure=true
       
       # Logging
-      - --log.level=DEBUG
+      - --log.level=INFO
     labels:
       - traefik.enable=true
       - traefik.http.routers.dashboard.rule=Host(`traefik.${DOMAIN}`)
