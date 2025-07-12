@@ -1,4 +1,4 @@
-FROM python:3.11
+FROM python:3.12
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -19,10 +19,8 @@ COPY src/ ./src/
 # Install Python dependencies and the package
 RUN pip install --upgrade pip && \
     pip install . && \
-    pip install uvicorn[standard]
-
-# Change ownership of the app directory to the app user
-RUN chown -R app:app /app
+    pip install uvicorn[standard] &&\
+    chown -R app:app /app
 
 # Switch to non-root user
 USER app
