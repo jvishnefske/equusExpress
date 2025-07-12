@@ -15,8 +15,6 @@ services:
       - "traefik.http.routers.fastapi.rule=Host(`${DOMAIN}`) && PathPrefix(`/`)"
       - "traefik.http.routers.fastapi.entrypoints=websecure"
       - "traefik.http.routers.fastapi.tls.certresolver=letsencrypt"
-      - "traefik.http.services.fastapi.loadbalancer.server.port=8000"
-      - "traefik.http.routers.fastapi.service=fastapi@docker"
 
   traefik:
     image: traefik:v3.0
@@ -48,7 +46,8 @@ services:
       - --certificatesresolvers.letsencrypt.acme.email=${LETSENCRYPT_EMAIL}
       - --certificatesresolvers.letsencrypt.acme.storage=/data/acme.json
       - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
-      - --certificatesresolvers.letsencrypt.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/acme/acct/212114084
+      - --certificatesresolvers.letsencrypt.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory
+
       
       # HTTP to HTTPS redirect
       - --entrypoints.web.http.redirections.entrypoint.to=websecure
