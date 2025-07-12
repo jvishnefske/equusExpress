@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.11
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -11,11 +11,6 @@ RUN useradd --create-home --shell /bin/bash app
 
 # Set work directory
 WORKDIR /app
-
-# Install system dependencies
-#RUN apt-get update && apt-get install -y \
-#    gcc \
-#    && rm -rf /var/lib/apt/lists/*
 
 # Copy project files
 COPY pyproject.toml README.md ./
