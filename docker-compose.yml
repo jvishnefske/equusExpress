@@ -3,6 +3,7 @@ services:
   fastapi:
     environment:
       - DOMAIN=${DOMAIN}
+      - UVICORN_LOG_LEVEL=debug
     build: .
     restart: unless-stopped
     expose:
