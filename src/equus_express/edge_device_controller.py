@@ -1,62 +1,47 @@
-#!/usr/bin/env python3
-"""
-Secure API Client with mTLS Authentication
-Uses provisioned certificates to authenticate with the secure server
-"""
-
-import httpx
-import ssl
-import json
 import logging
 import os
-import time
-from datetime import datetime, timezone
-import socket
 import asyncio
-import uuid
-import sys # Moved to top for global availability
-
-from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
+import json
+import time
+import platform
+import socket
+import fcntl
+import struct
+from typing import Optional, Dict, Any
+import httpx
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ed25519
+from cryptography.hazmat.primitives.hashes import Hash, SHA256
 from cryptography.hazmat.backends import default_backend
+from cryptography.exceptions import InvalidSignature
+from nats.aio.client import Client as NATS
+from nats_nkeys import KeyPair, InvalidNKey # Changed import from nats.nkeys to nats_nkeys
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# NATS imports
-import nats
-from nats.errors import ConnectionClosedError, TimeoutError, NoServersError
-from nats.nkeys import KeyPair, InvalidNKey
-
-# SMBus imports
-try:
-    import smbus2
-except ImportError:
-    smbus2 = None
-    logger.warning(
-        "smbus2 not found. SMBus communication will be unavailable."
-    )
-
-# Import psutil if available (optional dependency for telemetry)
 try:
     import psutil
 except ImportError:
     psutil = None
-    logger.warning(
-        "psutil not found. Some telemetry data might be unavailable."
-    )
+    logger.warning("psutil library not found. System telemetry functions will be limited.")
+
+try:
+    import smbus2
+except ImportError:
+    smbus2 = None
+    logger.warning("smbus2 library not found. SMBus communication will be disabled.")
 
 
 class PsutilNotInstalled(NotImplementedError):
     def __init__(self, message="psutil library is not available."):
         super().__init__(message)
 
+
 class SMBusNotAvailable(NotImplementedError):
     def __init__(self, message="smbus2 library is not available or bus not initialized."):
         super().__init__(message)
 
-# Define default key storage directory
+
 DEFAULT_KEY_DIR = os.path.expanduser("~/.equus_express/keys")
 
 
@@ -66,251 +51,262 @@ class SecureAPIClient:
         base_url: str,
         device_id: str = None,
         key_dir: str = DEFAULT_KEY_DIR,
+        timeout: int = 30,
     ):
-        """
-        Initialize the secure API client with public key management.
-
-        Args:
-            base_url: Base URL of the API server (e.g., HTTP for Traefik proxy)
-            device_id: Device identifier
-            key_dir: Directory to store generated private/public keys
-        """
-        self.base_url = base_url.rstrip("/")
-        self.device_id = device_id or socket.gethostname()
+        self.base_url = base_url
         self.key_dir = key_dir
-        self._private_key_path = os.path.join(self.key_dir, "device.pem")
-        self._public_key_path = os.path.join(self.key_dir, "device.pub")
+        os.makedirs(self.key_dir, exist_ok=True)
+        self.private_key_path = os.path.join(self.key_dir, "device_private_key.pem")
+        self.public_key_path = os.path.join(self.key_dir, "device_public_key.pub")
+        self.device_id_path = os.path.join(self.key_dir, "device_id.txt")
+        self.device_id = device_id
         self.private_key = None
-        self.public_key_pem = None
-
-        try:
-            self._load_or_generate_keys()
-        except (OSError, ValueError, TypeError) as e:
-            logger.error(f"Error during key loading or generation: {e}")
-            raise RuntimeError(f"Failed to initialize client keys: {e}") from e
-
-        # Create httpx client
-        self.client = httpx.Client(
-            base_url=self.base_url,
-            verify=True,
-            headers={  # Set default headers, including device ID for identification
-                "User-Agent": f"SecureClient/{self.device_id}",
-                "Content-Type": "application/json",
-                "X-Device-Id": self.device_id,  # Temporarily pass device_id in header for simplified auth
-            },
-        )
-
-        logger.info(f"Initialized client for device: {self.device_id}")
+        self.public_key = None
+        self.client = httpx.Client(timeout=timeout)
+        self._load_or_generate_keys()
 
     def _load_or_generate_keys(self):
-        """Load existing keys or generate new RSA key pair."""
-        os.makedirs(self.key_dir, exist_ok=True)  # Ensure directory exists
-
-        if os.path.exists(self._private_key_path) and os.path.exists(
-            self._public_key_path
-        ):
-            with open(self._private_key_path, "rb") as f:
-                self.private_key = serialization.load_pem_private_key(
-                    f.read(), password=None, backend=default_backend()
-                )
-            with open(self._public_key_path, "rb") as f:
-                self.public_key_pem = (
-                    f.read().decode("utf-8").strip()
-                )  # Strip newline here
-            logger.info("Existing device keys loaded.")
+        """Loads existing keys or generates new ones if they don't exist."""
+        if os.path.exists(self.private_key_path) and os.path.exists(self.public_key_path):
+            logger.info("Loading existing device keys.")
+            with open(self.private_key_path, "rb") as f:
+                self.private_key = serialization.load_pem_private_key(f.read(), password=None, backend=default_backend())
+            with open(self.public_key_path, "rb") as f:
+                self.public_key = serialization.load_ssh_public_key(f.read(), backend=default_backend())
+            if os.path.exists(self.device_id_path):
+                with open(self.device_id_path, "r") as f:
+                    self.device_id = f.read().strip()
+            else:
+                logger.warning("Device ID file not found, but keys exist. Device ID might be missing.")
         else:
-            logger.info("Generating new device keys...")
-            self.private_key = rsa.generate_private_key(
-                public_exponent=65537, key_size=2048, backend=default_backend()
-            )
-            # Serialize private key
-            pem_private_key = self.private_key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.PKCS8,
-                encryption_algorithm=serialization.NoEncryption(),
-            )
-            # Serialize public key
-            pem_public_key = self.private_key.public_key().public_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo,
-                encryption_algorithm=serialization.NoEncryption(),
-            )
-            self.public_key_pem = pem_public_key.decode(
-                "utf-8"
-            ).strip()  # Strip newline here
+            logger.info("Generating new device keys.")
+            self.private_key = ed25519.Ed25519PrivateKey.generate()
+            self.public_key = self.private_key.public_key()
 
-            with open(self._private_key_path, "wb") as f:
-                f.write(pem_private_key)
-            with open(self._public_key_path, "wb") as f:
-                f.write(pem_public_key)
-            logger.info(
-                f"New device keys generated and saved to {self.key_dir}"
-            )
+            with open(self.private_key_path, "wb") as f:
+                f.write(self.private_key.private_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PrivateFormat.PKCS8,
+                    encryption_algorithm=serialization.NoEncryption()
+                ))
+            with open(self.public_key_path, "wb") as f:
+                f.write(self.public_key.public_bytes(
+                    encoding=serialization.Encoding.OpenSSH,
+                    format=serialization.PublicFormat.OpenSSH
+                ))
+            if not self.device_id:
+                # Generate a simple hash of the public key as a default device ID
+                hasher = Hash(SHA256(), backend=default_backend())
+                hasher.update(self.public_key.public_bytes(
+                    encoding=serialization.Encoding.Raw,
+                    format=serialization.PublicFormat.Raw
+                ))
+                self.device_id = hasher.finalize().hex()[:32] # Use first 32 chars for a shorter ID
+                logger.info(f"Generated device ID: {self.device_id}")
+            with open(self.device_id_path, "w") as f:
+                f.write(self.device_id)
+
+    def _sign_request(self, method: str, endpoint: str, body: Optional[bytes] = None) -> str:
+        """Signs the request with the device's private key."""
+        message = f"{method.upper()} {endpoint}"
+        if body:
+            message += f"\n{body.decode('utf-8')}" # Assuming body is UTF-8 for signing
+        signature = self.private_key.sign(message.encode('utf-8'))
+        return signature.hex()
 
     def _make_request(self, method: str, endpoint: str, **kwargs):
-        """Make a request with error handling and logging"""
+        """Makes a signed HTTP request to the API server."""
         url = f"{self.base_url}{endpoint}"
+        headers = kwargs.pop("headers", {})
+        json_data = kwargs.get("json")
+        data = kwargs.get("data")
+
+        body_to_sign = None
+        if json_data is not None:
+            body_to_sign = json.dumps(json_data, separators=(',', ':')).encode('utf-8')
+            headers["Content-Type"] = "application/json"
+        elif data is not None:
+            if isinstance(data, dict):
+                body_to_sign = json.dumps(data, separators=(',', ':')).encode('utf-8')
+                headers["Content-Type"] = "application/json"
+            elif isinstance(data, bytes):
+                body_to_sign = data
+            else:
+                body_to_sign = str(data).encode('utf-8')
+
+        signature = self._sign_request(method, endpoint, body_to_sign)
+        headers["X-Device-ID"] = self.device_id
+        headers["X-Signature"] = signature
 
         try:
-            logger.debug(f"Making {method} request to {url}")
-            response = self.client.request(
-                method, url, **kwargs
-            )  # Changed self.session to self.client
-
-            # Log response status
-            logger.debug(f"Response status: {response.status_code}")
-
-            # Raise for HTTP errors
+            response = self.client.request(method, url, headers=headers, **kwargs)
             response.raise_for_status()
-
-            # Try to parse JSON response
-            try:
-                return response.json()
-            except json.JSONDecodeError:
-                # This branch is taken if response is 2xx but not valid JSON
-                logger.debug(f"Non-JSON response received from {url}")
-                return response.text
-
-        except httpx.ConnectError as e:
-            logger.error(f"Connection error: {e}")
-            raise ConnectionError(f"Failed to connect to server: {e}") from e
+            return response
         except httpx.HTTPStatusError as e:
-            logger.error(
-                f"HTTP error: {e.response.status_code} - {e.response.text}"
-            )
-            if e.response.status_code == 401:
-                raise PermissionError(
-                    "Authentication failed - invalid client certificate"
-                ) from e
-            elif e.response.status_code == 403:
-                raise PermissionError(
-                    "Access denied - insufficient permissions"
-                ) from e
-            else:
-                raise  # Re-raise original httpx.HTTPStatusError
+            logger.error(f"HTTP error for {method} {endpoint}: {e.response.status_code} - {e.response.text}")
+            raise
         except httpx.RequestError as e:
-            logger.error(f"Request failed: {e}")
-            raise ConnectionError(f"Request to server failed: {e}") from e
+            logger.error(f"Request error for {method} {endpoint}: {e}")
+            raise
 
     def get(self, endpoint: str, **kwargs):
-        """Make a GET request"""
         return self._make_request("GET", endpoint, **kwargs)
 
     def post(self, endpoint: str, data=None, json=None, **kwargs):
-        """Make a POST request"""
-        return self._make_request(
-            "POST", endpoint, data=data, json=json, **kwargs
-        )
+        return self._make_request("POST", endpoint, data=data, json=json, **kwargs)
 
     def put(self, endpoint: str, data=None, json=None, **kwargs):
-        """Make a PUT request"""
-        return self._make_request(
-            "PUT", endpoint, data=data, json=json, **kwargs
-        )
+        return self._make_request("PUT", endpoint, data=data, json=json, **kwargs)
 
     def delete(self, endpoint: str, **kwargs):
-        """Make a DELETE request"""
         return self._make_request("DELETE", endpoint, **kwargs)
 
     def register_device(self):
-        """Register the device's public key with the server."""
-        if not self.public_key_pem:
-            # Uncovered: Client does not have a public key for registration
-            raise RuntimeError("Public key not available for registration.")
-
-        logger.info(
-            f"Attempting to register device '{self.device_id}' with server..."
-        )
-        registration_payload = {
+        """Registers the device's public key with the API server."""
+        public_key_pem = self.public_key.public_bytes(
+            encoding=serialization.Encoding.OpenSSH,
+            format=serialization.PublicFormat.OpenSSH
+        ).decode('utf-8')
+        payload = {
             "device_id": self.device_id,
-            "public_key": self.public_key_pem,
+            "public_key": public_key_pem,
+            "ip_address": self._get_ip_address() # Include IP address during registration
         }
+        logger.info(f"Attempting to register device {self.device_id}...")
         try:
-            response = self.post("/api/register", json=registration_payload)
-            logger.info(f"Device registration response: {response}")
-            return response
-        except (httpx.RequestError, ConnectionError, PermissionError) as e:
-            # Uncovered: Network/server issue during registration
-            logger.error(
-                f"Failed to register device due to network/server issue: {e}"
-            )
-            raise  # Re-raise the specific exception
+            response = self.post("/api/register", json=payload)
+            logger.info(f"Device registration successful: {response.json()}")
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 409: # Conflict, device already registered
+                logger.info(f"Device {self.device_id} already registered. Updating info.")
+                # If already registered, we can try to update its info (e.g., IP address)
+                # The /api/register endpoint should handle updates if device_id exists
+                return {"message": "Device already registered, info updated."}
+            else:
+                logger.error(f"Device registration failed: {e.response.status_code} - {e.response.text}")
+                raise
+        except httpx.RequestError as e:
+            logger.error(f"Network error during device registration: {e}")
+            raise
 
     def health_check(self):
-        """Check server health"""
-        return self.get("/health")
+        """Performs a health check against the API server."""
+        logger.debug("Performing API health check...")
+        try:
+            response = self.get("/health")
+            logger.debug(f"API health check successful: {response.json()}")
+            return response.json()
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            logger.error(f"API health check failed: {e}")
+            raise
 
     def get_device_info(self):
-        """Get device information from server"""
-        return self.get("/api/device/info")
+        """Retrieves device information from the API server."""
+        logger.debug(f"Getting info for device {self.device_id}...")
+        try:
+            response = self.get("/api/device/info")
+            logger.debug(f"Device info received: {response.json()}")
+            return response.json()
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            logger.error(f"Failed to get device info: {e}")
+            raise
 
     def send_telemetry(self, data: dict):
-        """Send telemetry data to server"""
-        telemetry_payload = {
+        """Sends telemetry data to the API server."""
+        payload = {
             "device_id": self.device_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "data": data,
+            "timestamp": int(time.time()),
+            "data": data
         }
-        return self.post("/api/telemetry", json=telemetry_payload)
+        logger.debug(f"Sending telemetry for {self.device_id}: {payload}")
+        try:
+            response = self.post("/api/telemetry", json=payload)
+            logger.debug(f"Telemetry sent successfully: {response.json()}")
+            return response.json()
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            logger.error(f"Failed to send telemetry: {e}")
+            raise
 
     def get_configuration(self):
-        """Get device configuration from server"""
-        return self.get(f"/api/device/{self.device_id}/config")
+        """Retrieves device configuration from the API server."""
+        logger.debug(f"Getting configuration for device {self.device_id}...")
+        try:
+            response = self.get(f"/api/device/{self.device_id}/config")
+            logger.debug(f"Configuration received: {response.json()}")
+            return response.json()
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            logger.error(f"Failed to get configuration: {e}")
+            raise
 
     def update_status(self, status: str, details: dict = None):
-        """Update device status"""
-        status_payload = {
+        """Updates the device's status on the API server."""
+        payload = {
             "device_id": self.device_id,
+            "timestamp": int(time.time()),
             "status": status,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "details": details or {},
+            "details": details if details is not None else {}
         }
-        return self.post("/api/device/status", json=status_payload)
+        logger.debug(f"Updating status for {self.device_id}: {status}")
+        try:
+            response = self.post("/api/device/status", json=payload)
+            logger.debug(f"Status updated successfully: {response.json()}")
+            return response.json()
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            logger.error(f"Failed to update status: {e}")
+            raise
 
     def test_connection(self):
-        """Test the secure connection and certificate authentication"""
+        """Tests the full connection flow: health check, get info, send telemetry."""
+        logger.info(f"Testing connection for device {self.device_id}...")
         try:
-            logger.info("Testing connection and registration...")
+            self.health_check()
+            logger.info("API health check successful.")
 
-            # Test basic connectivity
-            response = self.health_check()
-            logger.info(f"Health check response: {response}")
+            self.get_device_info()
+            logger.info("Device info retrieval successful.")
 
-            # Attempt to register device (or re-register if already done)
-            registration_response = self.register_device()
-            logger.info(
-                f"Device registration/update response: {registration_response}"
-            )
+            # Send a dummy telemetry to confirm data path
+            self.send_telemetry({"test_metric": 1, "timestamp": int(time.time())})
+            logger.info("Dummy telemetry sent successfully.")
 
-            # Test an endpoint that relies on registered device_id (e.g., get_device_info)
-            # The server now relies on X-Device-Id header for initial simplified auth.
-            try:
-                device_info = self.get_device_info()
-                logger.info(f"Device info: {device_info}")
-            except (
-                httpx.RequestError,
-                ConnectionError,
-                PermissionError,
-            ) as e:  # Catch specific exceptions here
-                # Uncovered: Device info endpoint failed (warning but continue)
-                logger.warning(
-                    f"Device info endpoint failed (this might be expected if server requires stronger auth post-registration): {e}"
-                )
-                # This is a warning, so we continue and still return True if other steps succeeded.
-
-            logger.info(
-                "✅ Connection test and initial registration step completed!"
-            )
+            logger.info(f"Connection test for device {self.device_id} completed successfully.")
             return True
-
-        except (
-            httpx.RequestError,
-            ConnectionError,
-            PermissionError,
-            RuntimeError,
-        ) as e:
-            logger.error(f"❌ Connection test or registration failed: {e}")
+        except Exception as e:
+            logger.error(f"Connection test for device {self.device_id} failed: {e}")
             return False
+
+    def _get_ip_address(self):
+        """Attempts to get the local IP address."""
+        try:
+            # This method attempts to connect to an external host (Google's DNS)
+            # to determine the local IP address used for outbound connections.
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip_address = s.getsockname()[0]
+            s.close()
+            return ip_address
+        except Exception:
+            # Fallback for non-Linux systems or if the above fails
+            try:
+                # Try to get IP from a common interface name (e.g., eth0, wlan0)
+                # This is less reliable as interface names vary
+                if_names = ["eth0", "wlan0", "en0", "lo0"] # Common interface names
+                for ifname in if_names:
+                    try:
+                        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                        ip_address = socket.inet_ntoa(fcntl.ioctl(
+                            s.fileno(),
+                            0x8915,  # SIOCGIFADDR
+                            struct.pack('256s', ifname[:15].encode())
+                        )[20:24])
+                        s.close()
+                        return ip_address
+                    except OSError:
+                        continue # Try next interface
+                return "127.0.0.1" # Default to localhost if no other IP found
+            except Exception:
+                return "127.0.0.1" # Fallback if all else fails
 
 
 class NATSClient:
@@ -323,128 +319,107 @@ class NATSClient:
         self.nats_url = nats_url
         self.device_id = device_id
         self.key_dir = key_dir
-        self._nkey_seed_path = os.path.join(self.key_dir, "device.nk")
-        self._nkey_public_path = os.path.join(self.key_dir, "device.pub.nk")
+        self.nc = NATS()
         self.nkey_pair = None
-        self.nc = None  # NATS connection object
-
-        try:
-            self._load_or_generate_nkeys()
-        except (OSError, ValueError, InvalidNKey) as e:
-            logger.error(f"Error during NATS nkey loading or generation: {e}")
-            raise RuntimeError(f"Failed to initialize NATS nkeys: {e}") from e
+        self._load_or_generate_nkeys()
 
     def _load_or_generate_nkeys(self):
-        """Load existing NATS nkeys or generate new ones."""
-        os.makedirs(self.key_dir, exist_ok=True)
-
-        if os.path.exists(self._nkey_seed_path) and os.path.exists(
-            self._nkey_public_path
-        ):
-            with open(self._nkey_seed_path, "rb") as f:
+        """Loads existing NATS NKey pair or generates a new one."""
+        nkey_seed_path = os.path.join(self.key_dir, "nats_nkey.seed")
+        if os.path.exists(nkey_seed_path):
+            logger.info("Loading existing NATS NKey.")
+            with open(nkey_seed_path, "rb") as f:
                 seed = f.read()
-            self.nkey_pair = KeyPair.from_seed(seed)
-            logger.info("Existing NATS nkeys loaded.")
+            try:
+                self.nkey_pair = KeyPair.from_seed(seed)
+            except InvalidNKey:
+                logger.error("Invalid NKey seed found. Generating new NKey.")
+                self.nkey_pair = KeyPair.new()
+                with open(nkey_seed_path, "wb") as f:
+                    f.write(self.nkey_pair.seed)
         else:
-            logger.info("Generating new NATS nkeys...")
+            logger.info("Generating new NATS NKey.")
             self.nkey_pair = KeyPair.new()
-            seed = self.nkey_pair.seed
-            public_key = self.nkey_pair.public_key
-
-            with open(self._nkey_seed_path, "wb") as f:
-                f.write(seed)
-            with open(self._nkey_public_path, "wb") as f:
-                f.write(public_key)
-            logger.info(
-                f"New NATS nkeys generated and saved to {self.key_dir}"
-            )
+            with open(nkey_seed_path, "wb") as f:
+                f.write(self.nkey_pair.seed)
 
     async def connect(self):
-        """Connect to NATS server."""
-        if self.nc and self.nc.is_connected:
-            logger.info("NATS client already connected.")
-            return
-
+        """Connects to the NATS server with NKey authentication."""
+        logger.info(f"Connecting to NATS server at {self.nats_url} with device ID {self.device_id}...")
         try:
-            logger.info(f"Connecting to NATS server at {self.nats_url}...")
-            self.nc = await nats.connect(
-                self.nats_url,
-                nkeys_seed=self.nkey_pair.seed,
+            await self.nc.connect(
+                servers=[self.nats_url],
+                nkeys_pair=self.nkey_pair,
                 user_jwt_cb=self._user_jwt_callback,
                 signature_cb=self._signature_callback,
-                name=self.device_id, # Set client name for easier identification
                 error_cb=self._nats_error_cb,
                 reconnected_cb=self._nats_reconnected_cb,
                 disconnected_cb=self._nats_disconnected_cb,
                 closed_cb=self._nats_closed_cb,
+                name=f"device-agent-{self.device_id}"
             )
-            logger.info(f"Connected to NATS server: {self.nc.connected_url.netloc}")
-        except NoServersError as e:
-            logger.error(f"NATS connection failed: No servers available at {self.nats_url}. Error: {e}")
-            raise ConnectionError(f"NATS connection failed: {e}") from e
-        except ConnectionClosedError as e:
-            logger.error(f"NATS connection closed unexpectedly: {e}")
-            raise ConnectionError(f"NATS connection closed: {e}") from e
-        except TimeoutError as e:
-            logger.error(f"NATS connection timed out: {e}")
-            raise ConnectionError(f"NATS connection timed out: {e}") from e
+            logger.info(f"Successfully connected to NATS server.")
         except Exception as e:
-            logger.error(f"An unexpected error occurred during NATS connection: {e}")
-            raise ConnectionError(f"NATS connection failed: {e}") from e
+            logger.error(f"Failed to connect to NATS server: {e}")
+            raise
 
     async def disconnect(self):
-        """Disconnect from NATS server."""
-        if self.nc and self.nc.is_connected:
-            logger.info("Disconnecting from NATS server...")
+        """Disconnects from the NATS server."""
+        if self.nc.is_connected:
+            logger.info("Disconnecting from NATS server.")
             await self.nc.close()
             logger.info("Disconnected from NATS server.")
-        else:
-            logger.info("NATS client not connected.")
 
     async def publish(self, subject: str, payload: bytes):
-        """Publish a message to a NATS subject."""
-        if not self.nc or not self.nc.is_connected:
-            logger.warning(f"NATS client not connected, cannot publish to {subject}.")
+        """Publishes a message to a NATS subject."""
+        if not self.nc.is_connected:
+            logger.warning("NATS client not connected. Cannot publish message.")
             return
         try:
             await self.nc.publish(subject, payload)
-            logger.debug(f"Published to {subject}: {payload[:50]}...")
+            logger.debug(f"Published to '{subject}': {payload[:50]}...")
         except Exception as e:
-            logger.error(f"Failed to publish to {subject}: {e}")
-            raise
+            logger.error(f"Failed to publish to '{subject}': {e}")
 
     async def subscribe(self, subject: str, cb):
-        """Subscribe to a NATS subject."""
-        if not self.nc or not self.nc.is_connected:
-            logger.warning(f"NATS client not connected, cannot subscribe to {subject}.")
+        """Subscribes to a NATS subject."""
+        if not self.nc.is_connected:
+            logger.warning("NATS client not connected. Cannot subscribe.")
             return None
         try:
-            sub = await self.nc.subscribe(subject, cb=cb)
-            logger.info(f"Subscribed to {subject}")
-            return sub
+            sid = await self.nc.subscribe(subject, cb=cb)
+            logger.info(f"Subscribed to '{subject}' with SID {sid}")
+            return sid
         except Exception as e:
-            logger.error(f"Failed to subscribe to {subject}: {e}")
-            raise
+            logger.error(f"Failed to subscribe to '{subject}': {e}")
+            return None
 
     def _user_jwt_callback(self):
-        """Callback to provide user JWT for NATS authentication."""
-        return self.nkey_pair.public_key.decode()
+        """Callback to provide the user JWT for NATS authentication."""
+        # In a real-world scenario, this JWT would be obtained from a NATS Account Server
+        # or a secure provisioning service. For this example, we're relying on NKey auth
+        # which implicitly handles the user identity based on the NKey.
+        # If a JWT is required by the server, it would be returned here.
+        # For now, return None or an empty string if not explicitly used.
+        logger.debug("NATS user JWT callback invoked.")
+        return None
 
     def _signature_callback(self, nonce):
         """Callback to sign the nonce for NATS authentication."""
+        logger.debug("NATS signature callback invoked.")
         return self.nkey_pair.sign(nonce)
 
     async def _nats_error_cb(self, e):
-        logger.error(f"NATS error: {e}")
+        logger.error(f"NATS client error: {e}")
 
     async def _nats_reconnected_cb(self):
-        logger.info(f"NATS reconnected to {self.nc.connected_url.netloc}")
+        logger.info("NATS client reconnected.")
 
     async def _nats_disconnected_cb(self):
-        logger.warning("NATS disconnected!")
+        logger.warning("NATS client disconnected.")
 
     async def _nats_closed_cb(self):
-        logger.info("NATS connection closed.")
+        logger.info("NATS client connection closed.")
 
 
 class DeviceAgent:
@@ -457,521 +432,332 @@ class DeviceAgent:
         smbus_address: int = None,
         smbus_bus_num: int = 1,
     ):
-        self.client = client # For REST API communication
-        self.nats_client = nats_client # For NATS real-time communication
-        self.running = False
-        self.telemetry_task = None
-        self.command_listener_task = None
-
+        self.client = client
+        self.nats_client = nats_client
         self.smbus_address = smbus_address
         self.smbus_bus_num = smbus_bus_num
-        self.smbus = None
+        self.smbus_bus = None
+        self._telemetry_task = None
+        self._command_listener_task = None
 
-        if smbus2 and self.smbus_address is not None:
-            try:
-                self.smbus = smbus2.SMBus(self.smbus_bus_num)
-                logger.info(f"SMBus initialized on bus {self.smbus_bus_num} with address {hex(self.smbus_address)}")
-            except Exception as e:
-                logger.error(f"Failed to initialize SMBus on bus {self.smbus_bus_num}: {e}")
-                self.smbus = None # Ensure it's None if initialization fails
-        elif self.smbus_address is None:
-            logger.info("SMBus address not provided, SMBus functionality will be disabled.")
-        else:
-            logger.warning("smbus2 library not available, SMBus functionality will be disabled.")
-
+        if self.smbus_address is not None:
+            if smbus2:
+                try:
+                    self.smbus_bus = smbus2.SMBus(self.smbus_bus_num)
+                    logger.info(f"SMBus initialized on bus {self.smbus_bus_num} for address {hex(self.smbus_address)}")
+                except Exception as e:
+                    logger.error(f"Failed to initialize SMBus on bus {self.smbus_bus_num}: {e}")
+                    self.smbus_bus = None
+            else:
+                logger.warning("smbus2 not installed, SMBus communication disabled.")
 
     async def start(self):
-        """Start the device agent"""
-        logger.info("Starting device agent...")
-
-        # Perform connection test and registration with REST API
-        if not self.client.test_connection():
-            logger.error("Failed initial REST API connection and registration.")
-            self.running = False
-            return False
-
-        # Connect to NATS
+        """Starts the device agent, connecting to API and NATS, and starting loops."""
+        logger.info("Starting Device Agent...")
         try:
+            # 1. Register/Update device with API server
+            self.client.register_device()
+            logger.info("Device registered/updated with API server.")
+
+            # 2. Connect to NATS
             await self.nats_client.connect()
-        except ConnectionError as e:
-            logger.error(f"Failed to connect to NATS: {e}")
-            self.running = False
-            return False
+            logger.info("Connected to NATS server.")
 
-        self.running = True
+            # 3. Start telemetry loop
+            self._telemetry_task = asyncio.create_task(self.run_telemetry_loop())
+            logger.info("Telemetry loop started.")
 
-        # Start NATS command listener
-        self.command_listener_task = asyncio.create_task(self._command_listener())
+            # 4. Start command listener
+            command_subject = f"commands.{self.client.device_id}"
+            self._command_listener_task = asyncio.create_task(
+                self.nats_client.subscribe(command_subject, self._handle_command_message)
+            )
+            logger.info(f"Subscribed to NATS command subject: {command_subject}")
 
-        # Send initial status after successful connection/registration
-        try:
-            # Use NATS for status updates as per design doc implies real-time state
-            status_payload = {
-                "device_id": self.client.device_id,
-                "status": "online",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "details": {
-                    "startup_time": datetime.now(timezone.utc).isoformat(),
-                    "version": "1.0",
-                },
-            }
-            await self.nats_client.publish("device.status", json.dumps(status_payload).encode())
-            logger.info("Published initial 'online' status via NATS.")
+            logger.info("Device Agent started successfully.")
+            await self.client.update_status("online", {"message": "Device agent started."})
+
         except Exception as e:
-            logger.warning(f"Failed to send initial 'online' status via NATS: {e}")
-
-        return True
+            logger.critical(f"Failed to start Device Agent: {e}")
+            await self.client.update_status("error", {"message": f"Failed to start: {e}"})
+            # Attempt to stop gracefully if start fails
+            await self.stop()
+            raise
 
     async def stop(self):
-        """Stop the device agent"""
-        logger.info("Stopping device agent...")
-        self.running = False
-
-        # Cancel running tasks
-        if self.telemetry_task:
-            self.telemetry_task.cancel()
+        """Stops the device agent, disconnecting from NATS and cancelling tasks."""
+        logger.info("Stopping Device Agent...")
+        if self._telemetry_task:
+            self._telemetry_task.cancel()
             try:
-                await self.telemetry_task
-            except asyncio.CancelledError:
-                logger.debug("Telemetry task cancelled.")
-        if self.command_listener_task:
-            self.command_listener_task.cancel()
-            try:
-                await self.command_listener_task
-            except asyncio.CancelledError:
-                logger.debug("Command listener task cancelled.")
-
-        # Send offline status via NATS
-        try:
-            status_payload = {
-                "device_id": self.client.device_id,
-                "status": "offline",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "details": {"shutdown_time": datetime.now(timezone.utc).isoformat()},
-            }
-            await self.nats_client.publish("device.status", json.dumps(status_payload).encode())
-            logger.info("Published 'offline' status via NATS.")
-        except Exception as e:
-            logger.warning(f"Failed to send offline status via NATS: {e}")
-
-        # Disconnect from NATS
-        await self.nats_client.disconnect()
-
-        # Close SMBus if open
-        if self.smbus:
-            try:
-                self.smbus.close()
-                logger.info("SMBus closed.")
-            except Exception as e:
-                logger.warning(f"Error closing SMBus: {e}")
-
-
-    async def run_telemetry_loop(self, interval: int = 60):
-        """Run continuous telemetry reporting"""
-        logger.info(f"Starting telemetry loop (interval: {interval}s)")
-
-        while self.running:
-            try:
-                # Collect telemetry data
-                telemetry_data = self._collect_telemetry()
-
-                # Send to server via NATS
-                telemetry_payload = {
-                    "device_id": self.client.device_id,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "data": telemetry_data,
-                }
-                await self.nats_client.publish("pvs/update", json.dumps(telemetry_payload).encode())
-                logger.debug("Telemetry published via NATS.")
-
-                # Wait for next interval
-                await asyncio.sleep(interval)
-
+                await self._telemetry_task
             except asyncio.CancelledError:
                 logger.info("Telemetry loop cancelled.")
-                break
-            except (
-                ConnectionError,
-                json.JSONDecodeError,
-                TypeError,
-            ) as e:
-                logger.error(
-                    f"Telemetry loop communication or data error: {e}"
-                )
-                await asyncio.sleep(interval)  # Wait before retrying
+        if self._command_listener_task:
+            self._command_listener_task.cancel()
+            try:
+                await self._command_listener_task
+            except asyncio.CancelledError:
+                logger.info("Command listener cancelled.")
+
+        await self.nats_client.disconnect()
+        logger.info("NATS client disconnected.")
+
+        if self.smbus_bus:
+            try:
+                self.smbus_bus.close()
+                logger.info("SMBus closed.")
             except Exception as e:
-                logger.exception(
-                    f"An unexpected error occurred in telemetry loop: {e}"
-                )
-                await asyncio.sleep(interval)
+                logger.error(f"Error closing SMBus: {e}")
+
+        await self.client.update_status("offline", {"message": "Device agent stopped."})
+        logger.info("Device Agent stopped.")
+
+    async def run_telemetry_loop(self, interval: int = 60):
+        """Collects and sends telemetry data periodically."""
+        while True:
+            try:
+                telemetry_data = self._collect_telemetry()
+                await asyncio.sleep(0.1) # Yield control briefly
+                self.client.send_telemetry(telemetry_data)
+            except PsutilNotInstalled as e:
+                logger.warning(f"Telemetry collection skipped: {e}")
+            except Exception as e:
+                logger.error(f"Error collecting or sending telemetry: {e}")
+                await self.client.update_status("warning", {"message": f"Telemetry error: {e}"})
+            await asyncio.sleep(interval)
 
     async def _command_listener(self):
-        """Listen for commands on NATS and process them."""
-        logger.info("Starting NATS command listener...")
-        try:
-            # Subscribe to a specific command topic for this device
-            # Example: "command.execute.device_id" or a general "command.execute"
-            # For now, let's use a general topic as per DESIGN.md
-            await self.nats_client.subscribe(
-                "command/execute", cb=self._handle_command_message
-            )
-            # Keep the listener alive
-            while self.running:
-                await asyncio.sleep(1) # Keep the task alive
-        except asyncio.CancelledError:
-            logger.info("NATS command listener cancelled.")
-        except Exception as e:
-            logger.error(f"Error in NATS command listener: {e}")
+        """Listens for commands from the NATS server."""
+        # This method is now integrated into start() via self.nats_client.subscribe
+        # and the callback _handle_command_message.
+        pass
 
     async def _handle_command_message(self, msg):
-        """Callback for NATS command messages."""
+        """Callback to handle incoming NATS command messages."""
         subject = msg.subject
         reply = msg.reply
         data = msg.data.decode()
 
-        logger.info(f"Received NATS message on '{subject}': {data}")
+        logger.info(f"Received command on '{subject}': {data}")
 
         try:
             command = json.loads(data)
-            cmd_type = command.get("cmd")
+            cmd_type = command.get("type")
             params = command.get("params", {})
 
-            response_data = await self._handle_command(cmd_type, params)
-            if reply:
-                await self.nats_client.publish(reply, json.dumps(response_data).encode())
+            if not cmd_type:
+                raise ValueError("Command message missing 'type' field.")
 
+            result = await self._handle_command(cmd_type, params)
+            response_payload = {"status": "success", "result": result}
+            logger.info(f"Command '{cmd_type}' executed successfully. Result: {result}")
         except json.JSONDecodeError:
-            logger.error(f"Invalid JSON received on '{subject}': {data}")
-            if reply:
-                await self.nats_client.publish(reply, json.dumps({"status": "error", "message": "Invalid JSON"}).encode())
+            response_payload = {"status": "error", "message": "Invalid JSON command format."}
+            logger.error(f"Invalid JSON command received: {data}")
+        except ValueError as e:
+            response_payload = {"status": "error", "message": str(e)}
+            logger.error(f"Command validation error: {e}")
         except Exception as e:
-            logger.exception(f"Error processing command on '{subject}': {e}")
-            if reply:
-                await self.nats_client.publish(reply, json.dumps({"status": "error", "message": str(e)}).encode())
+            response_payload = {"status": "error", "message": f"Error executing command: {e}"}
+            logger.error(f"Unexpected error during command execution: {e}", exc_info=True)
+
+        if reply:
+            await self.nats_client.publish(reply, json.dumps(response_payload).encode())
+            logger.debug(f"Published command response to '{reply}': {response_payload}")
 
     async def _handle_command(self, cmd_type: str, params: dict) -> dict:
-        """Process a specific command, potentially interacting with SMBus."""
-        logger.info(f"Processing command: {cmd_type} with params: {params}")
-        response = {"status": "success", "command": cmd_type, "params": params}
-
-        if cmd_type == "SMBUS_WRITE_BLOCK":
+        """Executes a specific command based on its type."""
+        if cmd_type == "get_telemetry":
+            return self._collect_telemetry()
+        elif cmd_type == "update_config":
+            # Example: update configuration (in a real app, this would persist config)
+            new_interval = params.get("telemetry_interval")
+            if new_interval and isinstance(new_interval, int) and new_interval > 0:
+                # This would require re-scheduling the telemetry task,
+                # or passing the interval dynamically. For simplicity,
+                # we'll just log it here.
+                logger.info(f"Received request to update telemetry interval to {new_interval}s.")
+                # In a real system, you'd update a persistent config and potentially restart the loop
+                return {"message": f"Telemetry interval updated to {new_interval}s (requires restart to apply)."}
+            else:
+                raise ValueError("Invalid 'telemetry_interval' parameter.")
+        elif cmd_type == "smbus_write":
             address = params.get("address", self.smbus_address)
             command_code = params.get("command_code")
             data = params.get("data")
-            if address is None:
-                response = {"status": "error", "message": "SMBus address not specified for command."}
-            elif command_code is None or data is None:
-                response = {"status": "error", "message": "Missing command_code or data for SMBUS_WRITE_BLOCK."}
-            else:
-                try:
-                    # SMBus operations are blocking, run in a thread pool
-                    await asyncio.to_thread(self._smbus_write_block_data, address, command_code, data)
-                    response["message"] = f"SMBus block write to address {hex(address)}, command {hex(command_code)} successful."
-                except SMBusNotAvailable as e:
-                    response = {"status": "error", "message": str(e)}
-                except Exception as e:
-                    logger.error(f"SMBus write block failed: {e}")
-                    response = {"status": "error", "message": f"SMBus write block failed: {e}"}
-        elif cmd_type == "SMBUS_READ_BLOCK":
+            if address is None or command_code is None or data is None:
+                raise ValueError("Missing 'address', 'command_code', or 'data' for smbus_write.")
+            if not isinstance(data, list) or not all(isinstance(x, int) for x in data):
+                raise ValueError("'data' must be a list of integers for smbus_write.")
+            self._smbus_write_block_data(address, command_code, data)
+            return {"message": "SMBus write successful."}
+        elif cmd_type == "smbus_read":
             address = params.get("address", self.smbus_address)
             command_code = params.get("command_code")
             length = params.get("length")
-            if address is None:
-                response = {"status": "error", "message": "SMBus address not specified for command."}
-            elif command_code is None or length is None:
-                response = {"status": "error", "message": "Missing command_code or length for SMBUS_READ_BLOCK."}
-            else:
-                try:
-                    # SMBus operations are blocking, run in a thread pool
-                    read_data = await asyncio.to_thread(self._smbus_read_block_data, address, command_code, length)
-                    response["data"] = list(read_data) # Convert bytearray to list for JSON serialization
-                    response["message"] = f"SMBus block read from address {hex(address)}, command {hex(command_code)} successful."
-                except SMBusNotAvailable as e:
-                    response = {"status": "error", "message": str(e)}
-                except Exception as e:
-                    logger.error(f"SMBus read block failed: {e}")
-                    response = {"status": "error", "message": f"SMBus read block failed: {e}"}
+            if address is None or command_code is None or length is None:
+                raise ValueError("Missing 'address', 'command_code', or 'length' for smbus_read.")
+            if not isinstance(length, int) or length <= 0:
+                raise ValueError("'length' must be a positive integer for smbus_read.")
+            read_data = self._smbus_read_block_data(address, command_code, length)
+            return {"data": list(read_data)}
         else:
-            response = {"status": "error", "message": f"Unknown command type: {cmd_type}"}
-
-        return response
+            raise ValueError(f"Unknown command type: {cmd_type}")
 
     def _smbus_write_block_data(self, address: int, command_code: int, data: list):
-        """Write a block of data to an SMBus device."""
-        if not self.smbus:
+        """Writes a block of data to an SMBus device."""
+        if not self.smbus_bus:
             raise SMBusNotAvailable()
-        if address != self.smbus_address:
-            logger.warning(f"SMBus write requested for address {hex(address)} but agent is configured for {hex(self.smbus_address)}. Using requested address.")
         try:
-            self.smbus.write_i2c_block_data(address, command_code, data)
-            logger.info(f"SMBus write_i2c_block_data: addr={hex(address)}, cmd={hex(command_code)}, data={data}")
-        except OSError as e:
-            logger.error(f"SMBus write_i2c_block_data OSError: {e}")
-            raise IOError(f"SMBus write error: {e}") from e
+            self.smbus_bus.write_i2c_block_data(address, command_code, data)
+            logger.info(f"SMBus write: address={hex(address)}, cmd={hex(command_code)}, data={data}")
         except Exception as e:
-            logger.error(f"SMBus write_i2c_block_data unexpected error: {e}")
+            logger.error(f"SMBus write failed: {e}")
             raise
 
     def _smbus_read_block_data(self, address: int, command_code: int, length: int) -> bytearray:
-        """Read a block of data from an SMBus device."""
-        if not self.smbus:
+        """Reads a block of data from an SMBus device."""
+        if not self.smbus_bus:
             raise SMBusNotAvailable()
-        if address != self.smbus_address:
-            logger.warning(f"SMBus read requested for address {hex(address)} but agent is configured for {hex(self.smbus_address)}. Using requested address.")
         try:
             # read_i2c_block_data returns a list of integers
-            data = self.smbus.read_i2c_block_data(address, command_code, length)
-            logger.info(f"SMBus read_i2c_block_data: addr={hex(address)}, cmd={hex(command_code)}, length={length}, data={data}")
-            return bytearray(data)
-        except OSError as e:
-            logger.error(f"SMBus read_i2c_block_data OSError: {e}")
-            raise IOError(f"SMBus read error: {e}") from e
+            read_list = self.smbus_bus.read_i2c_block_data(address, command_code, length)
+            read_data = bytearray(read_list)
+            logger.info(f"SMBus read: address={hex(address)}, cmd={hex(command_code)}, length={length}, data={list(read_data)}")
+            return read_data
         except Exception as e:
-            logger.error(f"SMBus read_i2c_block_data unexpected error: {e}")
+            logger.error(f"SMBus read failed: {e}")
             raise
 
     def _collect_telemetry(self) -> dict:
-        """Collect telemetry data from the device"""
+        """Collects various system telemetry data."""
         telemetry = {
-            "system": {},
-            "network": {},
-            "application": {"status": "running", "last_error": None},
+            "timestamp": int(time.time()),
+            "device_id": self.client.device_id,
+            "system_info": {
+                "platform": platform.system(),
+                "release": platform.release(),
+                "architecture": platform.machine(),
+                "python_version": platform.python_version(),
+            },
+            "network_info": {
+                "ip_address": self.client._get_ip_address()
+            }
         }
-        errors = []
 
-        # Example telemetry data collection
-        try:
-            telemetry["system"]["uptime"] = self._get_uptime()
-        except Exception as e:
-            errors.append(f"uptime: {e}")
-            telemetry["system"]["uptime"] = "error"
-
-        try:
-            telemetry["system"]["cpu_usage"] = self._get_cpu_usage()
-        except Exception as e:
-            errors.append(f"cpu_usage: {e}")
-            telemetry["system"]["cpu_usage"] = "error"
-
-        try:
-            telemetry["system"]["memory_usage"] = self._get_memory_usage()
-        except Exception as e:
-            errors.append(f"memory_usage: {e}")
-            telemetry["system"]["memory_usage"] = {"error": str(e)}
-
-        try:
-            telemetry["system"]["disk_usage"] = self._get_disk_usage()
-        except Exception as e:
-            errors.append(f"disk_usage: {e}")
-            telemetry["system"]["disk_usage"] = {"error": str(e)}
-
-        try:
-            telemetry["system"]["temperature"] = self._get_temperature()
-        except Exception as e:
-            errors.append(f"temperature: {e}")
-            telemetry["system"]["temperature"] = "error"
-
-        try:
-            telemetry["network"]["ip_address"] = self._get_ip_address()
-        except Exception as e:
-            errors.append(f"ip_address: {e}")
-            telemetry["network"]["ip_address"] = "error"
-
-        telemetry["network"]["connection_quality"] = "good"  # Simplified
-
-        if errors:
-            telemetry["application"]["last_error"] = "; ".join(errors)
-            logger.warning(
-                f"Partial telemetry collection errors: {telemetry['application']['last_error']}"
-            )
+        if psutil:
+            telemetry["system_metrics"] = {
+                "uptime_seconds": self._get_uptime(),
+                "cpu_usage_percent": self._get_cpu_usage(),
+                "memory_usage": self._get_memory_usage(),
+                "disk_usage": self._get_disk_usage(),
+                "temperature_celsius": self._get_temperature(),
+            }
+        else:
+            raise PsutilNotInstalled()
 
         return telemetry
 
     def _get_uptime(self) -> float:
-        """Get system uptime"""
-        try:
-            with open("/proc/uptime", "r") as f:
-                return float(f.readline().split()[0])
-        except OSError as e:
-            logger.warning(f"Failed to get uptime: {e}")
-            raise  # Re-raise for _collect_telemetry to catch and report
+        """Returns system uptime in seconds."""
+        return psutil.boot_time()
 
     def _get_cpu_usage(self) -> float:
-        """Get CPU usage percentage"""
-        if psutil:
-            try:
-                return psutil.cpu_percent(interval=1)
-            except psutil.Error as e:
-                logger.warning(f"psutil CPU usage error: {e}")
-                raise  # Re-raise for _collect_telemetry to catch and report
-        else:
-            logger.debug("psutil not available for CPU usage.")
-            raise PsutilNotInstalled("psutil library is not available.")
+        """Returns CPU usage percentage."""
+        return psutil.cpu_percent(interval=None) # Non-blocking call
 
     def _get_memory_usage(self) -> dict:
-        """Get memory usage information"""
-        if psutil:
-            try:
-                mem = psutil.virtual_memory()
-                return {
-                    "total": mem.total,
-                    "available": mem.available,
-                    "percent": mem.percent,
-                }
-            except psutil.Error as e:
-                logger.warning(f"psutil memory usage error: {e}")
-                raise
-        else:
-            logger.debug("psutil not available for memory usage.")
-            raise PsutilNotInstalled("psutil library is not available.")
+        """Returns memory usage statistics."""
+        mem = psutil.virtual_memory()
+        return {
+            "total_gb": round(mem.total / (1024**3), 2),
+            "available_gb": round(mem.available / (1024**3), 2),
+            "percent": mem.percent,
+            "used_gb": round(mem.used / (1024**3), 2),
+            "free_gb": round(mem.free / (1024**3), 2),
+        }
 
     def _get_disk_usage(self) -> dict:
-        """Get disk usage information"""
-        if psutil:
-            try:
-                disk = psutil.disk_usage("/")
-                return {
-                    "total": disk.total,
-                    "used": disk.used,
-                    "free": disk.free,
-                    "percent": (disk.used / disk.total) * 100,
-                }
-            except psutil.Error as e:
-                logger.warning(f"psutil disk usage error: {e}")
-                raise
-        else:
-            logger.debug("psutil not available for disk usage.")
-            raise PsutilNotInstalled("psutil library is not available.")
+        """Returns disk usage statistics for the root partition."""
+        disk = psutil.disk_usage('/')
+        return {
+            "total_gb": round(disk.total / (1024**3), 2),
+            "used_gb": round(disk.used / (1024**3), 2),
+            "free_gb": round(disk.free / (1024**3), 2),
+            "percent": disk.percent,
+        }
 
     def _get_temperature(self) -> float:
-        """Get CPU temperature (Raspberry Pi specific)"""
-        try:
-            with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
-                temp = float(f.read().strip()) / 1000.0
-                return temp
-        except OSError as e:
-            logger.warning(f"Failed to get temperature: {e}")
-            raise
+        """Returns system temperature in Celsius if available."""
+        if hasattr(psutil, "sensors_temperatures"):
+            temps = psutil.sensors_temperatures()
+            if "coretemp" in temps and temps["coretemp"]:
+                return temps["coretemp"][0].current
+            elif "cpu_thermal" in temps and temps["cpu_thermal"]: # Raspberry Pi
+                return temps["cpu_thermal"][0].current
+        return 0.0 # Default if not found or not supported
 
     def _get_ip_address(self) -> str:
-        """Get device IP address (prefer non-loopback IPv4, fallback to hostname resolution)"""
-        try:
-            # gethostname() retrieves the local host's name
-            # gethostbyname() resolves a host name to an IPv4 address
-            ip = socket.gethostbyname(socket.gethostname())
-            logger.debug(f"Resolved IP via gethostbyname(gethostname()): {ip}")
-            return ip
-        except (
-            socket.gaierror
-        ) as e:  # Address information error (e.g., hostname not found)
-            logger.warning(
-                f"Failed to get IP address via hostname resolution: {e}"
-            )
-            raise  # Re-raise for _collect_telemetry to catch and report
-        except OSError as e:  # General OS error during hostname resolution
-            # Uncovered: OS error during IP address retrieval from hostname
-            logger.warning(
-                f"OS error during IP address retrieval from hostname: {e}"
-            )
-            raise  # Re-raise for _collect_telemetry to catch and report
+        """Returns the primary IP address of the device."""
+        return self.client._get_ip_address()
 
 
 async def main():
-    """Main function for running the secure client"""
-    # import sys # Moved to top
+    # Configuration
+    API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+    NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
+    DEVICE_ID = os.getenv("DEVICE_ID") # Optional: if not set, client will generate one
+    KEY_DIR = os.getenv("KEY_DIR", DEFAULT_KEY_DIR)
+    SMBUS_ADDRESS = os.getenv("SMBUS_ADDRESS")
+    SMBUS_BUS_NUM = os.getenv("SMBUS_BUS_NUM", "1")
 
-    if len(sys.argv) < 3:
-        print(
-            "Usage: python3 edge_device_controller.py <secure_server_url> <nats_url> [device_id] [smbus_address] [smbus_bus_num]"
-        )
-        print("Example: python3 edge_device_controller.py http://secure-server:8000 nats://localhost:4222 my_device_01 0x50 1")
-        sys.exit(1)
-
-    server_url = sys.argv[1]
-    nats_url = sys.argv[2]
-    device_id = sys.argv[3] if len(sys.argv) > 3 else None
-    smbus_address = None
-    smbus_bus_num = 1 # Default SMBus bus number
-
-    if len(sys.argv) > 4:
+    if SMBUS_ADDRESS:
         try:
-            # Attempt to parse as int (decimal or hex)
-            smbus_address = int(sys.argv[4], 0)
+            SMBUS_ADDRESS = int(SMBUS_ADDRESS, 16) if SMBUS_ADDRESS.startswith("0x") else int(SMBUS_ADDRESS)
         except ValueError:
-            logger.warning(f"Invalid SMBus address provided: {sys.argv[4]}. Attempting to derive from device_id.")
-            smbus_address = None # Reset if invalid
+            logger.error(f"Invalid SMBUS_ADDRESS: {SMBUS_ADDRESS}. Must be an integer or hex string.")
+            SMBUS_ADDRESS = None
+    
+    try:
+        SMBUS_BUS_NUM = int(SMBUS_BUS_NUM)
+    except ValueError:
+        logger.error(f"Invalid SMBUS_BUS_NUM: {SMBUS_BUS_NUM}. Must be an integer.")
+        SMBUS_BUS_NUM = 1 # Default to bus 1
 
-    if len(sys.argv) > 5:
-        try:
-            smbus_bus_num = int(sys.argv[5])
-        except ValueError:
-            logger.warning(f"Invalid SMBus bus number provided: {sys.argv[5]}. Using default bus 1.")
-            smbus_bus_num = 1
+    # Initialize clients
+    api_client = SecureAPIClient(
+        base_url=API_BASE_URL,
+        device_id=DEVICE_ID,
+        key_dir=KEY_DIR
+    )
+    nats_client = NATSClient(
+        nats_url=NATS_URL,
+        device_id=api_client.device_id, # Use the ID generated/loaded by API client
+        key_dir=KEY_DIR
+    )
 
-    # If device_id is a UUID and smbus_address was not provided or invalid, try to derive it
-    if smbus_address is None and device_id:
-        try:
-            device_uuid = uuid.UUID(device_id)
-            # Use the last byte of the UUID as a 7-bit SMBus address
-            smbus_address = device_uuid.bytes[-1] & 0x7F
-            logger.info(f"Derived SMBus address from device_id: {hex(smbus_address)}")
-        except ValueError:
-            logger.warning(f"Device ID '{device_id}' is not a valid UUID, cannot derive SMBus address.")
-            smbus_address = None # Ensure it's None if derivation fails
+    # Initialize and start agent
+    agent = DeviceAgent(
+        client=api_client,
+        nats_client=nats_client,
+        smbus_address=SMBUS_ADDRESS,
+        smbus_bus_num=SMBUS_BUS_NUM
+    )
 
     try:
-        # Create REST API client
-        client = SecureAPIClient(base_url=server_url, device_id=device_id)
-        # Ensure device_id is set from SecureAPIClient if it was None initially
-        device_id = client.device_id
-
-        # Create NATS client
-        nats_client = NATSClient(nats_url=nats_url, device_id=device_id)
-
-        # Create device agent
-        agent = DeviceAgent(
-            client=client,
-            nats_client=nats_client,
-            smbus_address=smbus_address,
-            smbus_bus_num=smbus_bus_num
-        )
-
-        # Start agent
-        if await agent.start():
-            logger.info("Device agent started successfully")
-
-            # Run telemetry loop concurrently
-            agent.telemetry_task = asyncio.create_task(agent.run_telemetry_loop(interval=30))
-
-            # Keep main running until interrupted
-            while agent.running:
-                await asyncio.sleep(1)
-
-        else:
-            logger.error("Failed to start device agent")
-            sys.exit(1)
-
-    except (RuntimeError, ConnectionError, PermissionError) as e:
-        logger.error(f"A critical client error occurred: {e}")
-        sys.exit(1)
+        await agent.start()
+        # Keep the agent running until interrupted
+        while True:
+            await asyncio.sleep(3600) # Sleep for a long time, agent tasks run in background
+    except asyncio.CancelledError:
+        logger.info("Agent main loop cancelled.")
     except Exception as e:
-        logger.exception(
-            f"An unexpected error occurred in the main client process: {e}"
-        )
-        sys.exit(1)
+        logger.critical(f"Agent encountered a critical error: {e}", exc_info=True)
     finally:
-        # Ensure agent stops cleanly on exit
-        if 'agent' in locals() and agent.running:
-            await agent.stop()
-        elif 'nats_client' in locals() and nats_client.nc and nats_client.nc.is_connected:
-            # If agent didn't start, but NATS client did, ensure it closes
-            await nats_client.disconnect()
+        await agent.stop()
+        logger.info("Agent stopped gracefully.")
 
-
-if __name__ == '__main__':
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("Client stopped by user.")
-    except Exception as e:
-        logger.critical(f"Unhandled exception in main asyncio run: {e}")
-        sys.exit(1)
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    asyncio.run(main())
