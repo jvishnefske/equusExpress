@@ -26,6 +26,22 @@ API_PRIVATE_KEY_PATH = API_KEYS_DIR / "api_server_key.pem"
 MOCK_API_SERVER_ID = "00000000-0000-4000-8000-000000000001"
 
 
+# Helper function for patching pathlib.Path.exists
+def _mock_path_exists_side_effect_factory(initial_values):
+    """
+    Creates a side effect function for pathlib.Path.exists.
+    It returns values from `initial_values` list, and then `True` for any subsequent calls.
+    This prevents StopIteration when pytest's internal cleanup calls .exists() more than expected.
+    """
+    iterator = iter(initial_values)
+    def mock_method(*args, **kwargs):
+        try: return next(iterator)
+        except StopIteration: return True # Default to True after initial values exhausted
+    return mock_method
+
+MOCK_API_SERVER_ID = "00000000-0000-4000-8000-000000000001"
+
+
 @pytest.fixture(autouse=True)
 def setup_teardown_db():
     """
@@ -91,7 +107,7 @@ def mock_api_identity_generation():
     mock_private_key.public_key.return_value.public_bytes.return_value = mock_public_key_pem
 
     with (
-        patch("equus_express.system_api.uuid", mock_uuid),
+        patch.object(pathlib.Path, 'exists', MagicMock(side_effect=_mock_path_exists_side_effect_factory([False, False]))), # Apply patch globally for Path.exists
         patch("equus_express.system_api.rsa.generate_private_key", return_value=mock_private_key),
         patch("equus_express.system_api.serialization") as mock_serialization,
         patch("equus_express.system_api.default_backend"),
@@ -100,11 +116,11 @@ def mock_api_identity_generation():
         patch("builtins.open", new_callable=mock_open) as mock_file_open,
     ):
         # Configure mock_serialization for PEM encoding/decryption
-        mock_serialization.Encoding.PEM = MagicMock()
+        mock_serialization.Encoding.PEM = MagicMock() # For init_api_server_identity which calls this
         mock_serialization.PrivateFormat.PKCS8 = MagicMock()
         mock_serialization.NoEncryption.return_value = MagicMock()
         mock_serialization.PublicFormat.SubjectPublicKeyInfo = MagicMock()
-        mock_serialization.load_pem_private_key.return_value = mock_private_key # For loading
+        mock_serialization.load_pem_private_key.return_value = mock_private_key # For init_api_server_identity which calls this
 
         yield {
             "mock_uuid": mock_uuid,
@@ -136,7 +152,7 @@ def mock_api_identity_loading():
     mock_open_instance.return_value.__enter__.return_value.read.return_value = b"mock_private_key_pem" # for api_server_key.pem
 
     with (
-        patch("equus_express.system_api.uuid", mock_uuid),
+        patch.object(pathlib.Path, 'exists', MagicMock(side_effect=_mock_path_exists_side_effect_factory([True, True]))), # Apply patch globally for Path.exists
         patch("equus_express.system_api.rsa.generate_private_key"), # Should not be called
         patch("equus_express.system_api.serialization") as mock_serialization,
         patch("equus_express.system_api.default_backend"),
@@ -145,7 +161,7 @@ def mock_api_identity_loading():
         patch("builtins.open", new_callable=mock_open) as mock_file_open,
     ):
         # Configure mock_serialization for PEM encoding/decryption
-        mock_serialization.Encoding.PEM = MagicMock()
+        mock_serialization.Encoding.PEM = MagicMock() # For init_api_server_identity which calls this
         mock_serialization.PrivateFormat.PKCS8 = MagicMock()
         mock_serialization.NoEncryption.return_value = MagicMock()
         mock_serialization.PublicFormat.SubjectPublicKeyInfo = MagicMock()
