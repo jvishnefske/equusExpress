@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
     # Use ExitStack to manage the lifecycle of temporary resources (e.g., extracted static files)
     # This ensures cleanup on application shutdown.
     app.state.temp_resource_manager = ExitStack()
-    init_api_server_identity(app) # Initialize API server's own identity (GUID, private key)
+    init_api_server_identity(app, key_dir=API_KEYS_DIR) # Initialize API server's own identity (GUID, private key)
 
     try:
         # Handle static files: they are now located INSIDE the 'equus_express' package.
@@ -300,14 +300,16 @@ def init_secure_db():
     conn.close()
 
 
-def init_api_server_identity(app: FastAPI):
+def init_api_server_identity(app: FastAPI, key_dir: pathlib.Path = None):
     """
     Initializes or loads the API server's unique GUID and private key.
     Stores them in app.state for later use (e.g., for server-to-server authentication).
     """
-    API_KEYS_DIR.mkdir(parents=True, exist_ok=True)
-    server_id_path = API_KEYS_DIR / "api_server_id.txt"
-    private_key_path = API_KEYS_DIR / "api_server_key.pem"
+    keys_path = key_dir if key_dir else API_KEYS_DIR
+
+    keys_path.mkdir(parents=True, exist_ok=True)
+    server_id_path = keys_path / "api_server_id.txt"
+    private_key_path = keys_path / "api_server_key.pem"
 
     server_id = None
     private_key = None

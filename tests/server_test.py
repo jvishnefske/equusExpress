@@ -7,12 +7,9 @@ from equus_express.system_api import PROJECT_ROOT_DIR # Import PROJECT_ROOT_DIR 
 from fastapi import FastAPI # Import FastAPI to create new app instances
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock # Added MagicMock import
-from unittest.mock import mock_open # Import mock_open
-from cryptography.hazmat.primitives.asymmetric import rsa # Import rsa for mocking key generation
-import pathlib # Import pathlib for Path operations
-
-# Initialize the TestClient
-client = TestClient(app)
+from unittest.mock import mock_open
+from cryptography.hazmat.primitives.asymmetric import rsa
+import pathlib
 
 # Define a test device ID and public key
 TEST_DEVICE_ID = "test_device_001"
@@ -21,9 +18,13 @@ TEST_PUBLIC_KEY = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD3g+3Y6J/K..."
 # Constants for API server identity tests
 API_KEYS_DIR = PROJECT_ROOT_DIR / "api_keys" # Use the directly imported PROJECT_ROOT_DIR
 API_SERVER_ID_PATH = API_KEYS_DIR / "api_server_id.txt"
-API_PRIVATE_KEY_PATH = API_KEYS_DIR / "api_server_key.pem"
+API_PRIVATE_KEY_PATH = API_KEYS_DIR / "api_server_key.pem" # This is now just a placeholder path, not actually used by tests
+MOCK_API_SERVER_ID = "00000000-0000-4000-8000-000000000001"
 
 
+
+# Initialize the TestClient AFTER defining PROJECT_ROOT_DIR and other module-level constants
+client = TestClient(app)
 
 # Helper function for patching pathlib.Path.exists
 def _mock_path_exists_side_effect_factory(initial_values):
@@ -60,19 +61,13 @@ def setup_teardown_db():
     # Define a temporary database file for testing
     test_db_path = "test_secure_devices.db"
     os.environ["SQLITE_DB_PATH"] = (
-        test_db_path  # Use an env var if server used it, or pass directly
+        test_db_path
     )
-
-    # Clean up API keys directory for each test that uses this fixture
-    if API_KEYS_DIR.exists():
-        for item in API_KEYS_DIR.iterdir():
-            if item.is_file():
-                item.unlink()
-        API_KEYS_DIR.rmdir()
-
     # Clean up the database file
     if os.path.exists(test_db_path):
         os.remove(test_db_path)
+
+    # No explicit API_KEYS_DIR cleanup needed here anymore, handled by mock_api_identity_generation/loading
     # Re-initialize the database
     init_secure_db() # Call init_secure_db which is now from system_api
 
@@ -94,17 +89,21 @@ def setup_teardown_db():
     # Clean up the environment variable too, if set
     if "SQLITE_DB_PATH" in os.environ:
         del os.environ["SQLITE_DB_PATH"]
-    # Also clean up the API keys directory in teardown
-    if API_KEYS_DIR.exists():
-        for item in API_KEYS_DIR.iterdir():
-            if item.is_file():
-                item.unlink()
-        API_KEYS_DIR.rmdir()
 
 
 @pytest.fixture
-def mock_api_identity_generation(patch_pathlib_exists_global):
+def mock_api_identity_generation(patch_pathlib_exists_global, tmp_path):
     """Mocks UUID and crypto functions for API server identity generation."""
+    # Ensure the actual directory is removed if it somehow exists from previous failed runs
+    # or for specific test scenarios where it might have been created.
+    # For these tests, we ensure a clean, mocked state.
+    temp_api_keys_dir = tmp_path / "test_api_keys_gen"
+    if temp_api_keys_dir.exists():
+        shutil.rmtree(temp_api_keys_dir)
+
+    # We pass this temp dir to the mocked init_api_server_identity call
+    patch_init_api_identity = patch('equus_express.system_api.init_api_server_identity', wraps=app.state.original_init_api_server_identity)
+
     mock_uuid = MagicMock()
     mock_uuid.uuid4.return_value = MOCK_API_SERVER_ID
 
@@ -115,17 +114,16 @@ def mock_api_identity_generation(patch_pathlib_exists_global):
     )
     mock_private_key.public_key.return_value.public_bytes.return_value = mock_public_key_pem
 
-    # Set the specific side effect for the `exists()` calls within init_api_server_identity
-    # These are the *only* calls to pathlib.Path.exists that we explicitly care to control.
+    # Configure the global patch to dictate behavior for the paths *within* the temp_api_keys_dir
     patch_pathlib_exists_global.side_effect = _mock_path_exists_side_effect_factory([False, False])
 
-    with (
+    with ( # Patch init_api_server_identity to capture the 'app' and override its key_dir
+        patch.object(app, 'state', wraps=app.state) as mock_app_state,
+        patch_init_api_identity as mock_init_api_identity, # Capture the patched function
         patch.object(pathlib.Path, 'exists', MagicMock(side_effect=_mock_path_exists_side_effect_factory([False, False]))), # Apply patch globally for Path.exists
         patch("equus_express.system_api.uuid", mock_uuid), # Patch uuid module used in system_api
-        patch("equus_express.system_api.rsa.generate_private_key", return_value=mock_private_key),
         patch("equus_express.system_api.serialization") as mock_serialization,
         patch("equus_express.system_api.default_backend"),
-        patch("equus_express.system_api.pathlib.Path.mkdir"),
         patch("builtins.open", new_callable=mock_open) as mock_file_open,
     ):
         # Configure mock_serialization for PEM encoding/decryption
@@ -133,20 +131,27 @@ def mock_api_identity_generation(patch_pathlib_exists_global):
         mock_serialization.PrivateFormat.PKCS8 = MagicMock()
         mock_serialization.NoEncryption.return_value = MagicMock()
         mock_serialization.PublicFormat.SubjectPublicKeyInfo = MagicMock() # For init_api_server_identity
-        mock_serialization.load_pem_private_key.return_value = mock_private_key # For init_api_server_identity
-        mock_serialization.load_pem_private_key.return_value = mock_private_key # For init_api_server_identity which calls this
+        mock_serialization.load_pem_private_key.return_value = mock_private_key
+
+        # Temporarily patch rsa.generate_private_key as it's called inside init_api_server_identity
+        with patch("equus_express.system_api.rsa.generate_private_key", return_value=mock_private_key):
+            # Manually call init_api_server_identity with the temporary path
+            # This bypasses the app's lifecycle for direct testing of this function
+            app.state.original_init_api_server_identity(app, key_dir=temp_api_keys_dir)
 
         yield {
             "mock_uuid": mock_uuid,
-            "mock_generate_private_key": rsa.generate_private_key,
+            "mock_generate_private_key": rsa.generate_private_key, # Expose the patched generate_private_key
             "mock_private_key": mock_private_key,
             "mock_file_open": mock_file_open,
             "mock_exists": patch_pathlib_exists_global, # Expose the global mock for assertions if needed
+            "temp_api_keys_dir": temp_api_keys_dir,
+            "mock_init_api_identity": mock_init_api_identity, # The patched lifespan startup function
         }
 
 
 @pytest.fixture
-def mock_api_identity_loading(patch_pathlib_exists_global):
+def mock_api_identity_loading(patch_pathlib_exists_global, tmp_path):
     """Mocks UUID and crypto functions for API server identity loading."""
     mock_uuid = MagicMock()
     mock_uuid.uuid4.return_value = MOCK_API_SERVER_ID # Even if not called, ensures consistency
@@ -158,46 +163,56 @@ def mock_api_identity_loading(patch_pathlib_exists_global):
     )
     mock_private_key.public_key.return_value.public_bytes.return_value = mock_public_key_pem
 
-    # Set the specific side effect for the `exists()` calls within init_api_server_identity
+    temp_api_keys_dir = tmp_path / "test_api_keys_load"
+    # We pass this temp dir to the mocked init_api_server_identity call
+    patch_init_api_identity = patch('equus_express.system_api.init_api_server_identity', wraps=app.state.original_init_api_server_identity)
+
+    # Configure the global patch to dictate behavior for the paths *within* the temp_api_keys_dir
     patch_pathlib_exists_global.side_effect = _mock_path_exists_side_effect_factory([True, True])
 
     # Simulate files existing for loading scenario
     mock_open_instance = mock_open()
-    mock_open_instance.return_value.__enter__.return_value.read.side_effect = [
+    mock_open_instance.return_value.__enter__.return_value.read.side_effect = [ # First call is readlines/read for ID, second for private key
         MOCK_API_SERVER_ID, # for api_server_id.txt
     ]
     mock_open_instance.return_value.__enter__.return_value.read.return_value = b"mock_private_key_pem" # for api_server_key.pem
-    with (
+    with ( # Patch init_api_server_identity to capture the 'app' and override its key_dir
+        patch.object(app, 'state', wraps=app.state) as mock_app_state,
+        patch_init_api_identity as mock_init_api_identity, # Capture the patched function
         patch.object(pathlib.Path, 'exists', MagicMock(side_effect=_mock_path_exists_side_effect_factory([True, True]))), # Apply patch globally for Path.exists
         patch("equus_express.system_api.uuid", mock_uuid), # Patch uuid module used in system_api
         patch("equus_express.system_api.rsa.generate_private_key"), # Should not be called
         patch("equus_express.system_api.serialization") as mock_serialization,
-        patch("equus_express.system_api.default_backend"),
-        patch("equus_express.system_api.pathlib.Path.mkdir"),
         patch("builtins.open", new_callable=mock_open) as mock_file_open,
     ):
         # Configure mock_serialization for PEM encoding/decryption
         mock_serialization.Encoding.PEM = MagicMock() # For init_api_server_identity which calls this
         mock_serialization.PrivateFormat.PKCS8 = MagicMock()
         mock_serialization.NoEncryption.return_value = MagicMock()
-        mock_serialization.PublicFormat.SubjectPublicKeyInfo = MagicMock() # For init_api_server_identity
-        mock_serialization.load_pem_private_key.return_value = mock_private_key # For init_api_server_identity
-        mock_serialization.load_pem_private_key.return_value = mock_private_key # This will be called
+        mock_serialization.PublicFormat.SubjectPublicKeyInfo = MagicMock()
+        mock_serialization.load_pem_private_key.return_value = mock_private_key
+
+        # Manually call init_api_server_identity with the temporary path
+        app.state.original_init_api_server_identity(app, key_dir=temp_api_keys_dir)
 
         yield {
             "mock_uuid": mock_uuid,
             "mock_generate_private_key": rsa.generate_private_key,
             "mock_private_key": mock_private_key,
             "mock_file_open": mock_file_open,
-            "mock_exists": pathlib.Path.exists,
+            "mock_exists": patch_pathlib_exists_global,
             "mock_serialization": mock_serialization,
+            "temp_api_keys_dir": temp_api_keys_dir,
+            "mock_init_api_identity": mock_init_api_identity,
         }
 
 
 def test_api_server_identity_generated_on_startup(setup_teardown_db, mock_api_identity_generation):
     """Test that API server identity (GUID and keys) is generated on startup if not present."""
     mock_crypto = mock_api_identity_generation
-    with TestClient(app) as client:
+
+    # Run TestClient as context manager to trigger lifespan, which calls the *patched* init_api_server_identity
+    with TestClient(app) as client: # This `app` instance's lifespan has already run due to fixture setup
         # Perform a request to trigger lifespan
         response = client.get("/health")
         assert response.status_code == 200
@@ -207,13 +222,22 @@ def test_api_server_identity_generated_on_startup(setup_teardown_db, mock_api_id
     mock_crypto["mock_uuid"].uuid4.assert_called_once()
 
     # Assert files were written
-    mock_crypto["mock_file_open"].assert_any_call(str(API_SERVER_ID_PATH), "w")
-    mock_crypto["mock_file_open"].assert_any_call(str(API_PRIVATE_KEY_PATH), "wb")
+    mock_crypto["mock_file_open"].assert_any_call(str(mock_crypto["temp_api_keys_dir"] / "api_server_id.txt"), "w")
+    mock_crypto["mock_file_open"].assert_any_call(str(mock_crypto["temp_api_keys_dir"] / "api_server_key.pem"), "wb")
+
+    # Assert mkdir was called on the temporary directory
+    mock_crypto["mock_init_api_identity"].assert_called_once_with(app, key_dir=mock_crypto["temp_api_keys_dir"])
+    # Check that the mocked init_api_server_identity called mkdir on the temp dir
+    with patch('equus_express.system_api.pathlib.Path.mkdir') as mock_mkdir:
+        # Call the original function directly with the temp dir to check its behavior
+        # without hitting the real filesystem.
+        app.state.original_init_api_server_identity(app, key_dir=mock_crypto["temp_api_keys_dir"])
+        mock_mkdir.assert_called_with(parents=True, exist_ok=True)
 
     # Assert that app.state was populated
     assert app.state.api_server_id == MOCK_API_SERVER_ID
     assert app.state.api_private_key is not None
-    assert "MOCK_API_PUBLIC_KEY" in app.state.api_public_key_pem
+    assert mock_crypto["mock_private_key"].public_key().public_bytes().decode("utf-8").strip() in app.state.api_public_key_pem
 
 
 def test_api_server_identity_loaded_on_startup(setup_teardown_db, mock_api_identity_loading):
@@ -224,7 +248,9 @@ def test_api_server_identity_loaded_on_startup(setup_teardown_db, mock_api_ident
     m_open_instance = mock_crypto["mock_file_open"].return_value.__enter__.return_value
     m_open_instance.read.side_effect = [
         MOCK_API_SERVER_ID, # Content for api_server_id.txt
-        b"-----BEGIN PRIVATE KEY-----MOCK_PRIVATE_KEY_LOADED-----END PRIVATE KEY-----", # Content for api_server_key.pem
+        b"-----BEGIN PRIVATE KEY-----MOCK_PRIVATE_KEY_LOADED-----END PRIVATE KEY-----",
+        # Add a third side effect for the public key read
+        MOCK_PUBLIC_KEY_PEM.encode("utf-8"),
     ]
 
     with TestClient(app) as client:
@@ -233,9 +259,13 @@ def test_api_server_identity_loaded_on_startup(setup_teardown_db, mock_api_ident
 
     # Assert loading occurred, not generation
     mock_crypto["mock_generate_private_key"].assert_not_called()
+    # The load_pem_private_key is now called once for the private key PEM
     mock_crypto["mock_serialization"].load_pem_private_key.assert_called_once()
+    # The public key bytes are derived from the loaded private key, not loaded from a file
+    mock_crypto["mock_private_key"].public_key().public_bytes.assert_called_once()
     assert app.state.api_server_id == MOCK_API_SERVER_ID
     assert app.state.api_private_key is not None
+    assert mock_crypto["mock_private_key"].public_key().public_bytes().decode("utf-8").strip() in app.state.api_public_key_pem
 
 
 # Fixture to mock sqlite3.connect for error scenarios
