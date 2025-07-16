@@ -11,6 +11,11 @@ import tempfile # Added for NamedTemporaryFile
 import sys # Import sys for main function tests
 import asyncio # For async tests
 import json # For NATS command handling tests
+import platform # Import platform module
+
+# Constants for testing
+TEST_BASE_URL = "https://mock-server"
+TEST_DEVICE_ID = "test_client_device" # Moved definition before first usage
 
 # Dummy Ed25519 keys for mocking
 # These are not real keys, just placeholders matching format
@@ -18,9 +23,6 @@ MOCK_ED25519_PRIVATE_KEY_PEM = b"-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBC
 MOCK_ED25519_PUBLIC_KEY_OPENSSH = b"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBAQEB...DUMMY_ED25519_PUBLIC_KEY...\n"
 MOCK_DEVICE_ID_CONTENT = TEST_DEVICE_ID.encode('utf-8')
 
-# Constants for testing
-TEST_BASE_URL = "https://mock-server"
-TEST_DEVICE_ID = "test_client_device"
 MOCK_IP_ADDRESS = f"192.168.{int.from_bytes(os.urandom(1), 'big')}.{int.from_bytes(os.urandom(1), 'big') % 254 + 1}"
 
 
@@ -56,7 +58,7 @@ def mock_crypto():
         patch("equus_express.edge_device_controller.os.path.exists") as mock_os_path_exists,
         patch("equus_express.edge_device_controller.os.makedirs") as mock_os_makedirs,
         patch("equus_express.edge_device_controller.Hash"), # Mock Hash for device_id generation
-        patch("equus_express.edge_device_controller.SHA256"), # Mock SHA256 for device_id generation
+        patch("equus_express.edge_device_controller.SHA256"), # Mock SHA2556 for device_id generation
     ):
         # Configure mock_serialization to behave like the actual module
         mock_serialization.Encoding.PEM = MagicMock(name="Encoding.PEM_mock")
@@ -454,7 +456,7 @@ def test_secure_client_test_connection_failure(
     client = secure_client_keys_exist
     # Make the mock raise a specific httpx error that test_connection catches
     mock_httpx_client.request.side_effect = httpx.ConnectError(
-        "Connection failed", request=httpx.Request("GET", TEST_BASE_URL)
+        "Connection failed", request=httpx.Request("POST", TEST_BASE_URL)
     )
     assert client.test_connection() is False
 
