@@ -416,7 +416,6 @@ def test_secure_client_update_status(
     test_status = "idle"
     test_details = {"battery": "90%"}
     with patch("equus_express.edge_device_controller.datetime") as mock_dt:  # Removed src.
-    with patch("equus_express.edge_device_controller.datetime") as mock_dt:  # Removed src.
         mock_dt.now.return_value = datetime(
             2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc
         )
@@ -818,8 +817,7 @@ def test_device_agent_collect_telemetry_ip_address_psutil_error(mock_device_agen
     with patch("equus_express.edge_device_controller.psutil") as mock_psutil_module:
         mock_psutil_module.Error = RuntimeError # Define a mock Error type for psutil
         mock_psutil_module.net_if_addrs.side_effect = mock_psutil_module.Error("Net if addrs error")
-        with patch(
-            "equus_express.client.socket.gethostbyname",
+        with patch("equus_express.edge_device_controller.socket.gethostbyname",
             side_effect=socket.gaierror("Hostname error")
         ):
             telemetry = agent._collect_telemetry()
@@ -847,8 +845,7 @@ def test_device_agent_collect_telemetry_ip_address_socket_error(mock_device_agen
     with patch("equus_express.edge_device_controller.psutil") as mock_psutil_module:
         mock_psutil_module.Error = RuntimeError # Define a mock Error type for psutil
         mock_psutil_module.net_if_addrs.side_effect = mock_psutil_module.Error("Simulate psutil not finding IP")
-        with patch(
-            "equus_express.client.socket.gethostbyname",
+        with patch("equus_express.edge_device_controller.socket.gethostbyname",
             side_effect=socket.gaierror("gethostbyname error"),
         ):
             telemetry = agent._collect_telemetry()

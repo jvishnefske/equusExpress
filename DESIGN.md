@@ -1,7 +1,3 @@
-Of course. Here is a `DESIGN.md` file that distills the essential technical information into a concise guide for your development team, keeping the 6-page constraint in mind.
-
----
-
 # Bioreactor Control System: Technical Design
 
 **Version:** 1.0  
@@ -29,8 +25,7 @@ We will implement a three-tier architecture that clearly delineates responsibili
     -   A Single-Page Application (SPA) running in a standard web browser.
     -   Responsible for all user interaction: model configuration, recipe authoring, and the real-time Operator HMI.
     -   Communicates with the system_api via a REST API (for configuration) and WebSockets (for real-time data).
-
-2.  **Application Tier (Web Server)**
+2.  **Application Tier (System API)**
     -   The "brain" of the system.
     -   Hosts the **Batch Executive**, the engine that interprets and executes recipes.
     -   Provides the REST API for CRUD operations on models and recipes.
@@ -145,10 +140,7 @@ This is the output of our graphical Recipe Editor. It represents the procedural 
 | Topic Name         | Publisher  | Subscriber | Purpose                                       |
 | ------------------ | ---------- | ---------- | --------------------------------------------- |
 | `pvs/update`       | Firmware   | Server, UI | Real-time sensor Process Variable (PV) updates. |
-| `command/execute`  | System API | Firmware   | High-level command from the Batch Executive.  |
-| `phase/state`      | Firmware   | System API | Firmware reports a phase state change (e.g., COMPLETE). |
-| `batch/status`     | System API | UI         | Overall batch status updates for the HMI.     |
-| `batch/alarm`      | System API | UI         | Broadcasts process alarms to clients.         |
+\ No newline at end of file
 
 ---
 
