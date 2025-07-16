@@ -31,7 +31,7 @@ def _mock_path_exists_side_effect_factory(initial_values):
     iterator = iter(initial_values)
     def mock_method(*args, **kwargs):
         try: return next(iterator)
-        except StopIteration: return True
+        except StopIteration: return True # Always return True after initial values are exhausted
     return mock_method
 
 # Removed @pytest.fixture(autouse=True) patch_pathlib_exists_global
@@ -99,10 +99,9 @@ def mock_api_identity_generation(tmp_path):
         patch("equus_express.system_api.serialization") as mock_serialization,
         patch("equus_express.system_api.default_backend"),
         patch("builtins.open", m_open),
-        patch("equus_express.system_api.rsa.generate_private_key", return_value=mock_private_key),
         # Patch pathlib.Path.exists to control behavior for the specific files
-        patch.object(pathlib.Path, 'exists', side_effect=[False, False]), # First call for server_id_path.exists(), second for private_key_path.exists()
-        patch.object(pathlib.Path, 'mkdir'), # Mock mkdir to prevent actual directory creation
+        patch.object(pathlib.Path, 'exists', side_effect=_mock_path_exists_side_effect_factory([False, False])), # First call for server_id_path.exists(), second for private_key_path.exists()
+        patch.object(path_lib.Path, 'mkdir'), # Mock mkdir to prevent actual directory creation
     ):
         # Configure mock_serialization for PEM encoding/decryption
         mock_serialization.Encoding.PEM = MagicMock()
@@ -159,7 +158,7 @@ def mock_api_identity_loading(tmp_path):
         patch("equus_express.system_api.serialization") as mock_serialization,
         patch("builtins.open", m_open),
         # Patch pathlib.Path.exists to control behavior for the specific files
-        patch.object(pathlib.Path, 'exists', side_effect=[True, True]), # First call for server_id_path.exists(), second for private_key_path.exists()
+        patch.object(pathlib.Path, 'exists', side_effect=_mock_path_exists_side_effect_factory([True, True])), # First call for server_id_path.exists(), second for private_key_path.exists()
         patch.object(pathlib.Path, 'mkdir'), # Mock mkdir to prevent actual directory creation
     ):
         # Configure mock_serialization for PEM encoding/decryption
