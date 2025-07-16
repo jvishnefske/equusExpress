@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives.hashes import Hash, SHA256
 from cryptography.hazmat.backends import default_backend
 from cryptography.exceptions import InvalidSignature
 from nats.aio.client import Client as NATS
-from nats_nkeys import KeyPair, InvalidNKey # Changed import from nats.nkeys to nats_nkeys
+from nats.nkeys import KeyPair, InvalidNKey # Reverted import back to nats.nkeys
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +104,7 @@ class SecureAPIClient:
                 self.device_id = hasher.finalize().hex()[:32] # Use first 32 chars for a shorter ID
                 logger.info(f"Generated device ID: {self.device_id}")
             with open(self.device_id_path, "w") as f:
-                f.write(self.device_id)
+                self.device_id = f.write(self.device_id)
 
     def _sign_request(self, method: str, endpoint: str, body: Optional[bytes] = None) -> str:
         """Signs the request with the device's private key."""
