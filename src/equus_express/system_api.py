@@ -21,10 +21,6 @@ from contextlib import asynccontextmanager, ExitStack  # Added ExitStack
 import uuid # New import for UUID generation
 import pathlib # New import for path manipulation
 
-import importlib.resources as pkg_resources  # New import for importlib.resources
-import tempfile  # New import for temporary directory creation
-import shutil  # New import for copying files
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

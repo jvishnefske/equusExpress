@@ -10,7 +10,7 @@ from typing import Optional, Dict, Any
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives.hashes import Hash, SHA256
-from cryptography.hazmat.backends import default_backend
+from cryptography.hazhat.backends import default_backend
 
 # Conditional import for psutil and smbus2
 try:
