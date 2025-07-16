@@ -1,8 +1,8 @@
 import os
 import sqlite3
 import pytest
-from fastapi.testclient import TestClient
-from equus_express.server import app, init_secure_db, lifespan # Import lifespan
+from fastapi.testclient import TestClient # Changed import to system_api
+from equus_express.system_api import app, init_secure_db, lifespan
 import tempfile
 from fastapi import FastAPI # Import FastAPI to create new app instances
 from datetime import datetime, timezone
@@ -35,7 +35,7 @@ def setup_teardown_db():
         os.remove(test_db_path)
 
     # Re-initialize the database
-    init_secure_db()
+    init_secure_db() # Call init_secure_db which is now from system_api
 
     # Yield control to the test function
     yield
@@ -52,7 +52,7 @@ def setup_teardown_db():
 @pytest.fixture
 def mock_db_error():
     """Fixture to mock sqlite3.connect to raise an error."""
-    with patch("equus_express.server.sqlite3.connect") as mock_connect:
+    with patch("equus_express.system_api.sqlite3.connect") as mock_connect:
         mock_connect.side_effect = sqlite3.Error("Mock DB Error")
         yield mock_connect
 
@@ -397,7 +397,7 @@ def test_register_device_db_error(mock_db_error):
 def test_register_device_unexpected_error():
     """Test device registration endpoint handles unexpected errors."""
     # Mock register_or_update_device to raise a non-sqlite3 error
-    with patch('equus_express.server.register_or_update_device', side_effect=ValueError("Simulated unexpected error")):
+    with patch('equus_express.system_api.register_or_update_device', side_effect=ValueError("Simulated unexpected error")):
         response = client.post(
             "/api/register",
             json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
@@ -433,8 +433,8 @@ def test_receive_telemetry_db_error(mock_db_error):
 
 def test_receive_telemetry_unexpected_error():
     """Test receive telemetry endpoint handles unexpected errors."""
-    # Mock sqlite3.connect within the endpoint to raise a non-sqlite3 error
-    with patch('equus_express.server.sqlite3.connect', side_effect=ValueError("Unexpected telemetry DB error")):
+    # Mock sqlite3.connect within the endpoint to raise a non-system_api error
+    with patch('equus_express.system_api.sqlite3.connect', side_effect=ValueError("Unexpected telemetry DB error")):
         telemetry_data = {
             "device_id": TEST_DEVICE_ID,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -468,7 +468,7 @@ def test_update_device_status_db_error(mock_db_error):
 
 def test_update_device_status_unexpected_error():
     """Test update device status endpoint handles unexpected errors."""
-    with patch('equus_express.server.sqlite3.connect', side_effect=ValueError("Unexpected status DB error")):
+    with patch('equus_express.system_api.sqlite3.connect', side_effect=ValueError("Unexpected status DB error")):
         status_data = {
             "device_id": TEST_DEVICE_ID,
             "status": "active",
@@ -496,7 +496,7 @@ def test_get_device_config_db_error(mock_db_error):
 
 def test_get_device_config_unexpected_error():
     """Test get device config endpoint handles unexpected errors."""
-    with patch('equus_express.server.sqlite3.connect', side_effect=ValueError("Unexpected config DB error")):
+    with patch('equus_express.system_api.sqlite3.connect', side_effect=ValueError("Unexpected config DB error")):
         response = client.get(
             f"/api/device/{TEST_DEVICE_ID}/config",
             headers={"X-Device-Id": TEST_DEVICE_ID},
@@ -514,7 +514,7 @@ def test_list_devices_db_error(mock_db_error):
 
 def test_list_devices_unexpected_error():
     """Test list devices endpoint handles unexpected errors."""
-    with patch('equus_express.server.sqlite3.connect', side_effect=ValueError("Unexpected list devices DB error")):
+    with patch('equus_express.system_api.sqlite3.connect', side_effect=ValueError("Unexpected list devices DB error")):
         response = client.get("/api/admin/devices")
     assert response.status_code == 500
     assert "Failed to list devices" in response.json()["detail"]
@@ -529,7 +529,7 @@ def test_get_device_telemetry_db_error(mock_db_error):
 
 def test_get_device_telemetry_unexpected_error():
     """Test get device telemetry endpoint handles unexpected errors."""
-    with patch('equus_express.server.sqlite3.connect', side_effect=ValueError("Unexpected telemetry DB error")):
+    with patch('equus_express.system_api.sqlite3.connect', side_effect=ValueError("Unexpected telemetry DB error")):
         response = client.get(f"/api/admin/telemetry/{TEST_DEVICE_ID}")
     assert response.status_code == 500
     assert "Failed to retrieve telemetry" in response.json()["detail"]
@@ -537,7 +537,7 @@ def test_get_device_telemetry_unexpected_error():
 
 def test_favicon_not_found():
     """Test favicon endpoint when file is not found."""
-    with patch("equus_express.server.pkg_resources.files") as mock_files:
+    with patch("equus_express.system_api.pkg_resources.files") as mock_files:
         mock_files.return_value.joinpath.return_value.is_dir.return_value = False
         mock_files.return_value.joinpath.return_value.__enter__.side_effect = FileNotFoundError("Favicon missing")
         response = client.get("/favicon.ico")
@@ -552,7 +552,7 @@ def test_lifespan_static_file_setup_error():
     temp_app = FastAPI(lifespan=lifespan)
 
     # Mock tempfile.TemporaryDirectory to raise an error
-    with patch("equus_express.server.tempfile.TemporaryDirectory", side_effect=OSError("Temp dir error")):
+    with patch("equus_express.system_api.tempfile.TemporaryDirectory", side_effect=OSError("Temp dir error")):
         with pytest.raises(RuntimeError, match="Failed to initialize static file serving"):
             # Use TestClient as a context manager to ensure lifespan startup is fully executed and errors propagated
             with TestClient(temp_app) as client:
