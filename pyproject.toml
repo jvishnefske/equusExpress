@@ -19,7 +19,7 @@ dependencies = [
     "psutil", # Add psutil if it's a runtime dependency for telemetry
     "jsonschema>=4.24.0",
     "smbus2>=0.5.0",
-    "nats-py>=2.10.0", # Changed nats-py version back to >=2.10.0
+    "nats-py>=2.10.0",
     "nkeys>=0.2.1",
 ]
 
@@ -37,4 +37,5 @@ build = "yarn run build"
 [dependency-groups]
 dev = [
     "pytest>=8.4.1",
+    "pytest-asyncio", # Added pytest-asyncio to dev dependencies
 ]
