@@ -16,6 +16,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.exceptions import InvalidSignature
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -226,20 +227,21 @@ class SecureAPIClient:
             logger.error(f"Failed to get device info: {e}")
             raise
 
-    async def send_telemetry(self, data: dict):
-        logger.debug(f"Sending telemetry for device {self.device_id}.")
-        payload = {
-            "device_id": self.device_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "data": data,
-        }
-        try:
-            response = await self.post("/api/telemetry", json=payload)
-            logger.debug(f"Telemetry sent successfully: {response.json()}")
-            return response.json()
-        except Exception as e:
-            logger.error(f"Failed to send telemetry: {e}")
-            raise
+    # Removed send_telemetry - now handled by NATS in DeviceAgent
+    # async def send_telemetry(self, data: dict):
+    #     logger.debug(f"Sending telemetry for device {self.device_id}.")
+    #     payload = {
+    #         "device_id": self.device_id,
+    #         "timestamp": datetime.now(timezone.utc).isoformat(),
+    #         "data": data,
+    #     }
+    #     try:
+    #         response = await self.post("/api/telemetry", json=payload)
+    #         logger.debug(f"Telemetry sent successfully: {response.json()}")
+    #         return response.json()
+    #     except Exception as e:
+    #         logger.error(f"Failed to send telemetry: {e}")
+    #         raise
 
     async def get_configuration(self):
         logger.debug(f"Fetching configuration for device {self.device_id}.")
@@ -251,21 +253,22 @@ class SecureAPIClient:
             logger.error(f"Failed to get configuration: {e}")
             raise
 
-    async def update_status(self, status: str, details: dict = None):
-        logger.debug(f"Updating status for device {self.device_id} to {status}.")
-        payload = {
-            "device_id": self.device_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "status": status,
-            "details": details if details is not None else {},
-        }
-        try:
-            response = await self.post("/api/device/status", json=payload)
-            logger.debug(f"Status updated successfully: {response.json()}")
-            return response.json()
-        except Exception as e:
-            logger.error(f"Failed to update status: {e}")
-            raise
+    # Removed update_status - now handled by NATS in DeviceAgent
+    # async def update_status(self, status: str, details: dict = None):
+    #     logger.debug(f"Updating status for device {self.device_id} to {status}.")
+    #     payload = {
+    #         "device_id": self.device_id,
+    #         "timestamp": datetime.now(timezone.utc).isoformat(),
+    #         "status": status,
+    #         "details": details if details is not None else {},
+    #     }
+    #     try:
+    #         response = await self.post("/api/device/status", json=payload)
+    #         logger.debug(f"Status updated successfully: {response.json()}")
+    #         return response.json()
+    #     except Exception as e:
+    #         logger.error(f"Failed to update status: {e}")
+    #         raise
 
     async def test_connection(self) -> bool:
         """Tests connectivity to the API server and device registration status."""
@@ -469,17 +472,17 @@ class DeviceAgent:
         self._running = True
 
         try:
-            # 1. Test API connection and register/verify device
+            # 1. Test API connection and register/verify device (HTTP)
             if not await self.client.test_connection():
                 logger.critical("Failed to establish connection with API server or register device. Exiting.")
                 self._running = False
                 return
 
-            # 2. Update device status to 'online'
-            await self.client.update_status("online", {"ip_address": self._get_ip_address()})
-
-            # 3. Connect to NATS
+            # 2. Connect to NATS
             await self.nats_client.connect()
+
+            # 3. Update device status to 'online' via NATS
+            await self._publish_status("online", {"ip_address": self._get_ip_address()})
 
             # 4. Start telemetry loop
             self._telemetry_task = asyncio.create_task(self.run_telemetry_loop())
@@ -494,11 +497,11 @@ class DeviceAgent:
         except Exception as e:
             logger.critical(f"Failed to start Device Agent: {e}")
             self._running = False
-            # Attempt to update status to 'error' if possible
+            # Attempt to update status to 'error' via NATS if possible
             try:
-                await self.client.update_status("error", {"message": f"Startup failed: {e}"})
+                await self._publish_status("error", {"message": f"Startup failed: {e}"})
             except Exception as status_e:
-                logger.error(f"Failed to update status to 'error' during startup failure: {status_e}")
+                logger.error(f"Failed to publish status 'error' during startup failure: {status_e}")
 
     async def stop(self):
         logger.info("Stopping Device Agent...")
@@ -518,13 +521,13 @@ class DeviceAgent:
             except asyncio.CancelledError:
                 logger.debug("Command listener cancelled.")
 
-        await self.nats_client.disconnect()
-
-        # Update device status to 'offline'
+        # Update device status to 'offline' via NATS
         try:
-            await self.client.update_status("offline")
+            await self._publish_status("offline")
         except Exception as e:
-            logger.error(f"Failed to update status to 'offline' during shutdown: {e}")
+            logger.error(f"Failed to publish status 'offline' during shutdown: {e}")
+
+        await self.nats_client.disconnect() # Disconnect NATS after sending final status
 
         if self.smbus:
             try:
@@ -535,25 +538,43 @@ class DeviceAgent:
 
         logger.info("Device Agent stopped.")
 
-    async def run_telemetry_loop(self, interval: int = 60):
-        """Collects and sends telemetry data at specified intervals."""
+    async def run_telemetry_loop(self, interval: int = 1): # Reduced interval for faster testing/demonstration
+        """Collects and sends telemetry data at specified intervals via NATS."""
         logger.info(f"Starting telemetry loop with interval: {interval} seconds.")
         while self._running:
             try:
                 telemetry_data = self._collect_telemetry()
-                await self.client.send_telemetry(telemetry_data)
-                logger.debug("Telemetry sent.")
+                # Add device_id to telemetry data for server identification
+                telemetry_data["device_id"] = self.client.device_id
+                # Publish to NATS pvs/update topic
+                await self.nats_client.publish("pvs/update", json.dumps(telemetry_data).encode())
+                logger.debug("Telemetry published to NATS.")
             except PsutilNotInstalled as e:
                 logger.warning(f"Telemetry collection skipped due to missing dependency: {e}")
             except Exception as e:
-                logger.error(f"Error collecting or sending telemetry: {e}")
-                # Optionally, update device status to indicate telemetry issues
+                logger.error(f"Error collecting or publishing telemetry: {e}")
+                # Optionally, publish device status to indicate telemetry issues
                 try:
-                    await self.client.update_status("warning", {"telemetry_error": str(e)})
+                    await self._publish_status("warning", {"telemetry_error": str(e)})
                 except Exception as status_e:
-                    logger.error(f"Failed to update status with telemetry error: {status_e}")
+                    logger.error(f"Failed to publish status with telemetry error: {status_e}")
             await asyncio.sleep(interval)
         logger.info("Telemetry loop stopped.")
+
+    async def _publish_status(self, status: str, details: dict = None):
+        """Publishes device status to NATS."""
+        logger.debug(f"Publishing status for device {self.client.device_id} to {status}.")
+        payload = {
+            "device_id": self.client.device_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "status": status,
+            "details": details if details is not None else {},
+        }
+        try:
+            await self.nats_client.publish("device.status", json.dumps(payload).encode())
+            logger.debug(f"Status '{status}' published to NATS.")
+        except Exception as e:
+            logger.error(f"Failed to publish status '{status}' to NATS: {e}")
 
     async def _command_listener(self):
         """Listens for commands from the NATS server."""
@@ -592,9 +613,9 @@ class DeviceAgent:
         response = {"status": "success", "message": f"Command '{cmd_type}' executed."}
 
         if cmd_type == "get_device_info":
-            response["data"] = await self.client.get_device_info()
+            response["data"] = await self.client.get_device_info() # Still uses HTTP client
         elif cmd_type == "get_config":
-            response["data"] = await self.client.get_configuration()
+            response["data"] = await self.client.get_configuration() # Still uses HTTP client
         elif cmd_type == "smbus_write_block":
             address = params.get("address", self.smbus_address)
             command_code = params.get("command_code")
