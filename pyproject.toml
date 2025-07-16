@@ -18,6 +18,8 @@ dependencies = [
     "httpx",
     "psutil", # Add psutil if it's a runtime dependency for telemetry
     "jsonschema>=4.24.0",
+    "smbus2>=0.5.0",
+    "nats-py>=2.10.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -30,3 +32,8 @@ where = ["src"] # Specify that packages are found under the 'src' directory
 folder = "src/equus_express/frontend"
 install = "yarn install --frozen-lockfile"
 build = "yarn run build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+]
