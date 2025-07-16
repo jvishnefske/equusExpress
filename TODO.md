@@ -11,11 +11,15 @@ This checklist outlines the remaining implementation tasks for the Equus Express
     - [ ] Implement API endpoint to list pending provisioning requests for admin approval.
     - [ ] Implement API endpoint for administrators to approve/reject API provisioning requests.
 - [X] **NATS Integration:**
-    - [X] Implement NATS connection and subscription/publication logic within `system_api` (server-side).
-    - [X] Configure `system_api` to use NATS `nkeys` or `tokens` for authentication.
+    - [ ] Implement NATS connection and subscription/publication logic within `system_api` (server-side).
+        - *Note: This implies the `system_api` itself acting as a NATS client/publisher/subscriber, which is not currently the case. Re-evaluate if `system_api` should directly interact with NATS or if NATS integration is only for edge devices and a separate NATS-to-API bridge is needed.*
+    - [ ] Configure `system_api` to use NATS `nkeys` or `tokens` for authentication.
+        - *Note: Dependent on the above. If `system_api` is not a NATS client, this task might be for the NATS server configuration itself.*
     - [X] Implement NATS connection and subscription/publication logic within `edge_device_controller` (client-side).
-    - [X] Configure `edge_device_controller` to use NATS `nkeys` for authentication.
-    - [X] `edge_device_controller` publishes telemetry (`pvs/update`) and status (`device.status`) to NATS.
+        - *Note: Basic structure is in place, but actual NATS.py library calls are currently mocked.*
+    - [ ] Configure `edge_device_controller` to use NATS `nkeys` for authentication.
+    - [ ] `edge_device_controller` publishes telemetry (`pvs/update`) and status (`device.status`) to NATS.
+        - *Note: Currently, telemetry and status are sent via HTTP to the `system_api`. This needs to be refactored to use NATS.*
     - [X] `edge_device_controller` subscribes to `command/execute` for remote commands.
 - [ ] **Batch Executive:**
     - [ ] Implement the core Batch Executive logic for interpreting and executing recipes.
