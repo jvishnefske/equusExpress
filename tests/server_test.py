@@ -7,6 +7,9 @@ from equus_express.system_api import PROJECT_ROOT_DIR # Import PROJECT_ROOT_DIR 
 from fastapi import FastAPI # Import FastAPI to create new app instances
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock # Added MagicMock import
+from unittest.mock import mock_open # Import mock_open
+from cryptography.hazmat.primitives.asymmetric import rsa # Import rsa for mocking key generation
+import pathlib # Import pathlib for Path operations
 
 # Initialize the TestClient
 client = TestClient(app)
