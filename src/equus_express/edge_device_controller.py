@@ -559,7 +559,10 @@ class DeviceAgent:
             response_payload = {"status": "error", "message": str(e)}
             logger.error(f"Command validation error: {e}")
         except Exception as e:
-            response_payload = {"status": "error", "message": f"Unexpected error during command execution: {e}", exc_info=True}
+            # Corrected syntax: exc_info is a parameter for logger.error, not a dictionary key.
+            # The exception details will be logged separately.
+            response_payload = {"status": "error", "message": f"Unexpected error during command execution: {e}"}
+            logger.error(f"Unexpected error during command execution: {e}", exc_info=True)
 
         if reply:
             await self.nats_client.publish(reply, json.dumps(response_payload).encode())
