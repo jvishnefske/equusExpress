@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock # Added MagicMock import
 from unittest.mock import mock_open
 from cryptography.hazmat.primitives.asymmetric import rsa
+import shutil # Import shutil for rmtree
 import pathlib
 
 # Define a test device ID and public key
