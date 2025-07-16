@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives.hashes import Hash, SHA256
 from cryptography.hazmat.backends import default_backend
 from cryptography.exceptions import InvalidSignature
 from nats.aio.client import Client as NATS
-from nkeys import KeyPair, InvalidNKey # Changed import from nats.nkeys to nkeys
+from nkeys import KeyPair, ErrInvalidSeed # Changed InvalidNKey to ErrInvalidSeed
 
 logger = logging.getLogger(__name__)
 
@@ -332,7 +332,7 @@ class NATSClient:
                 seed = f.read()
             try:
                 self.nkey_pair = KeyPair.from_seed(seed)
-            except InvalidNKey:
+            except ErrInvalidSeed: # Changed InvalidNKey to ErrInvalidSeed
                 logger.error("Invalid NKey seed found. Generating new NKey.")
                 self.nkey_pair = KeyPair.new()
                 with open(nkey_seed_path, "wb") as f:
@@ -559,8 +559,7 @@ class DeviceAgent:
             response_payload = {"status": "error", "message": str(e)}
             logger.error(f"Command validation error: {e}")
         except Exception as e:
-            response_payload = {"status": "error", "message": f"Error executing command: {e}"}
-            logger.error(f"Unexpected error during command execution: {e}", exc_info=True)
+            response_payload = {"status": "error", "message": f"Unexpected error during command execution: {e}", exc_info=True}
 
         if reply:
             await self.nats_client.publish(reply, json.dumps(response_payload).encode())
