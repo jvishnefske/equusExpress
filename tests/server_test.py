@@ -152,7 +152,7 @@ def mock_api_identity_loading(tmp_path):
         patch("equus_express.system_api.serialization.load_pem_private_key", return_value=mock_private_key), # Patch the function directly
         patch("builtins.open", m_open),
         # Patch pathlib.Path.exists to control behavior for the specific files
-        patch.object(path, 'exists', side_effect=_mock_path_exists_side_effect_factory([True, True])), # First call for server_id_path.exists(), second for private_key_path.exists()
+        patch.object(pathlib.Path, 'exists', side_effect=_mock_path_exists_side_effect_factory([True, True])), # First call for server_id_path.exists(), second for private_key_path.exists()
         patch.object(pathlib.Path, 'mkdir'), # Mock mkdir to prevent actual directory creation
     ):
         # Call the function directly with the mocked app and temp_api_keys_dir

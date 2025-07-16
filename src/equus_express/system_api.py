@@ -20,6 +20,9 @@ import socket
 from contextlib import asynccontextmanager, ExitStack  # Added ExitStack
 import uuid # New import for UUID generation
 import pathlib # New import for path manipulation
+import tempfile # Added for tempfile.TemporaryDirectory
+import shutil # Added for shutil.copy
+import importlib.resources as pkg_resources # Added for static file handling
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
