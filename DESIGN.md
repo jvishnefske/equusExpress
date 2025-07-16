@@ -99,7 +99,7 @@ This is the output of our graphical Recipe Editor. It represents the procedural 
 {
   "id": "recipe_pqrst",
   "name": "Standard Fermentation",
-  "version": "1.0",
+  "version": "1.0.0",
   "startStep": "step_1",
   "steps": [
     {
