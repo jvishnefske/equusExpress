@@ -12,12 +12,17 @@ import os
 import time
 from datetime import datetime, timezone
 import socket
-import asyncio # Added for async operations
-import uuid # Added for UUID parsing
+import asyncio
+import uuid
+import sys # Moved to top for global availability
 
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.backends import default_backend
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # NATS imports
 import nats
@@ -32,10 +37,6 @@ except ImportError:
     logger.warning(
         "smbus2 not found. SMBus communication will be unavailable."
     )
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Import psutil if available (optional dependency for telemetry)
 try:
@@ -876,7 +877,7 @@ class DeviceAgent:
 
 async def main():
     """Main function for running the secure client"""
-    import sys
+    # import sys # Moved to top
 
     if len(sys.argv) < 3:
         print(
