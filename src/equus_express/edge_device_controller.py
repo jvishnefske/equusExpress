@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives.hashes import Hash, SHA256
 from cryptography.hazmat.backends import default_backend
 from cryptography.exceptions import InvalidSignature
 from nats.aio.client import Client as NATS
-from nats.nkeys import KeyPair, InvalidNKey # Reverted import back to nats.nkeys
+from nkeys import KeyPair, InvalidNKey # Changed import from nats.nkeys to nkeys
 
 logger = logging.getLogger(__name__)
 
