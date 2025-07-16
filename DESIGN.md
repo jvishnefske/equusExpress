@@ -227,6 +227,7 @@ This is the most complex UI component. It must be intuitive for non-programmers.
 ---
 
 ## 6. Non-Functional Requirements & Technology
+-   The system will support two primary login types: user-to-server for human operators and server-to-server for API provisioning and communication between `system_api` instances.
 -   **Security**: **Role-Based Access Control (RBAC) is mandatory**. At minimum: Administrator, Engineer, Operator. All communication must be encrypted (HTTPS/WSS/TLS).
 -   **Security**: **Role-Based Access Control (RBAC) is mandatory**. At minimum: Administrator, Engineer, Operator. All communication must be encrypted (HTTPS/WSS/TLS).
     -   **API Identity & Provisioning**: Each `system_api` instance will have a persistent, locally generated UUID and a corresponding private key. These identifiers and keys are *never* stored in version control; if a valid UUID/private key pair is not found in local storage, a new one will be generated. The last byte of the UUID *may* be used as a 7-bit SMBus address for local device interactions.
