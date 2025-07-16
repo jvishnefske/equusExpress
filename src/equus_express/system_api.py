@@ -174,33 +174,31 @@ def init_secure_db():
         """
                    CREATE TABLE IF NOT EXISTS devices
                    (
-                       device_id
-                       TEXT
-                       PRIMARY
-                       KEY,
-                       public_key
-                       TEXT,
-                       first_seen
-                       TIMESTAMP
-                       DEFAULT
-                       CURRENT_TIMESTAMP, -- Default to current timestamp
-                       last_seen
-                       TIMESTAMP
-                       DEFAULT
-                       CURRENT_TIMESTAMP, -- Default to current timestamp
-                       status
-                       TEXT -- Status for edge devices (online, offline, etc.)
-                       DEFAULT
-                       'unknown',
-                       DEFAULT
-                       'unknown',
-                       ip_address
-                       TEXT,
-                       device_info
-                       TEXT
-                       DEFAULT
-                       '{}',
+                       device_id TEXT PRIMARY KEY,
+                       public_key TEXT,
+                       first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                       last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                       status TEXT DEFAULT 'unknown', -- Status for edge devices (online, offline, etc.)
+                       ip_address TEXT,
+                       device_info TEXT DEFAULT '{}',
                        type TEXT DEFAULT 'edge_device' -- 'edge_device' or 'api_server'
+                   )
+                   """
+    )
+
+    # API Provisioning Requests table
+    cursor.execute(
+        """
+                   CREATE TABLE IF NOT EXISTS api_provision_requests
+                   (
+                       request_id TEXT PRIMARY KEY,
+                       requesting_api_id TEXT NOT NULL,
+                       public_key TEXT NOT NULL,
+                       contact_email TEXT,
+                       notes TEXT,
+                       requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                       status TEXT DEFAULT 'pending', -- pending, approved, rejected
+                       ip_address TEXT
                    )
                    """
     )
