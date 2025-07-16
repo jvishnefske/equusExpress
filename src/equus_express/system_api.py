@@ -183,13 +183,13 @@ def init_secure_db():
                        first_seen
                        TIMESTAMP
                        DEFAULT
-                       CURRENT_TIMESTAMP,
+                       CURRENT_TIMESTAMP, -- Default to current timestamp
                        last_seen
                        TIMESTAMP
                        DEFAULT
-                       CURRENT_TIMESTAMP,
+                       CURRENT_TIMESTAMP, -- Default to current timestamp
                        status
-                       TEXT # Status for edge devices (online, offline, etc.)
+                       TEXT -- Status for edge devices (online, offline, etc.)
                        DEFAULT
                        'unknown',
                        DEFAULT
