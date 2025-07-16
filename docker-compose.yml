@@ -1,80 +1,72 @@
-version: '3.8'
 
 services:
   fastapi:
+    environment:
+      - DOMAIN=${DOMAIN}
+      - UVICORN_LOG_LEVEL=debug
     build: .
-    # If you don't have a Dockerfile, uncomment the next line and modify as needed
-    # image: tiangolo/uvicorn-gunicorn-fastapi:python3.9
-    container_name: fastapi-app
     restart: unless-stopped
-    environment:
-      - PORT=8000
     expose:
-      - "8000"
+      - 8000
     networks:
-      - app-network
-    # Uncomment if you need to mount local files
-    # volumes:
-    #   - ./app:/app
-
-  traefik:
-    image: traefik:v2.10
-    container_name: traefik
-    restart: unless-stopped
-    command:
-      - "--api.dashboard=true"
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.websecure.address=:443"
-      - "--certificatesresolvers.letsencrypt.acme.dnschallenge=true"
-      - "--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare"
-      - "--certificatesresolvers.letsencrypt.acme.email=your-email@example.com"
-      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
-      - "--certificatesresolvers.letsencrypt.acme.caserver=https://acme-v02.api.letsencrypt.org/directory"
-    ports:
-      - "443:443"
-      - "8080:8080"  # Traefik dashboard
-    environment:
-      # Cloudflare DNS challenge credentials
-      - CF_API_EMAIL=your-cloudflare-email@example.com
-      - CF_API_KEY=your-cloudflare-global-api-key
-      # Alternative: use CF_DNS_API_TOKEN instead of CF_API_KEY
-      # - CF_DNS_API_TOKEN=your-cloudflare-dns-api-token
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./letsencrypt:/letsencrypt
-    networks:
-      - app-network
+      - web
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.dashboard.rule=Host(`traefik.${HOSTNAME}`)"
-      - "traefik.http.routers.dashboard.entrypoints=websecure"
-      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.dashboard.service=api@internal"
-
-  fastapi-proxy:
-    image: traefik:v2.10
-    container_name: fastapi-proxy
-    restart: unless-stopped
-    depends_on:
-      - fastapi
-      - traefik
-    networks:
-      - app-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.fastapi.rule=Host(`api.${HOSTNAME}`)"
+      - "traefik.http.routers.fastapi.rule=Host(`${DOMAIN}`)"
       - "traefik.http.routers.fastapi.entrypoints=websecure"
       - "traefik.http.routers.fastapi.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.fastapi.service=fastapi"
-      - "traefik.http.services.fastapi.loadbalancer.server.port=8000"
-      - "traefik.http.services.fastapi.loadbalancer.server.url=http://fastapi:8000"
+
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    environment:
+      - DOMAIN=${DOMAIN}
+      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-data:/data
+    networks:
+      - web
+    command:
+      # Entry points
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.websecure.http3
+
+      # Docker provider
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+
+      # SSL certificates
+      - --certificatesresolvers.letsencrypt.acme.email=${LETSENCRYPT_EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.storage=/data/acme.json
+      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
+
+      # HTTP to HTTPS redirect
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      
+      # Dashboard
+      - --api.dashboard=true
+      - --api.insecure=true
+      
+      # Logging
+      - --log.level=INFO
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dashboard.rule=Host(`traefik.${DOMAIN}`)
+      - traefik.http.routers.dashboard.entrypoints=websecure
+      - traefik.http.routers.dashboard.tls.certresolver=letsencrypt
+      - traefik.http.routers.dashboard.service=api@internal
 
 networks:
-  app-network:
+  web:
     driver: bridge
 
 volumes:
-  letsencrypt:
-    driver: local
+  traefik-data:
