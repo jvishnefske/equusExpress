@@ -101,7 +101,7 @@ def mock_api_identity_generation(tmp_path):
         patch("builtins.open", m_open),
         # Patch pathlib.Path.exists to control behavior for the specific files
         patch.object(pathlib.Path, 'exists', side_effect=_mock_path_exists_side_effect_factory([False, False])), # First call for server_id_path.exists(), second for private_key_path.exists()
-        patch.object(path_lib.Path, 'mkdir'), # Mock mkdir to prevent actual directory creation
+        patch.object(pathlib.Path, 'mkdir'), # Mock mkdir to prevent actual directory creation
     ):
         # Configure mock_serialization for PEM encoding/decryption
         mock_serialization.Encoding.PEM = MagicMock()
@@ -315,11 +315,11 @@ def test_register_device_missing_fields():
     """Test device registration with missing device_id or public_key."""
     response = client.post("/api/register", json={"public_key": TEST_PUBLIC_KEY})
     assert response.status_code == 422 # Pydantic validation error
-    assert "missing" in response.json()["detail"][0]["type"]
+    assert "missing" in response.json()["detail"][0]["loc"]
 
     response = client.post("/api/register", json={"device_id": TEST_DEVICE_ID})
     assert response.status_code == 422 # Pydantic validation error
-    assert "missing" in response.json()["detail"][0]["type"]
+    assert "missing" in response.json()["detail"][0]["loc"]
 
 
 def test_receive_telemetry_device_id_mismatch():
