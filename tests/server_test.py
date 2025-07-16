@@ -3,7 +3,7 @@ import sqlite3
 import pytest
 from fastapi.testclient import TestClient # Changed import to system_api
 from equus_express.system_api import app, init_secure_db, lifespan
-import tempfile
+from equus_express.system_api import PROJECT_ROOT_DIR # Import PROJECT_ROOT_DIR directly
 from fastapi import FastAPI # Import FastAPI to create new app instances
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock # Added MagicMock import
@@ -16,7 +16,7 @@ TEST_DEVICE_ID = "test_device_001"
 TEST_PUBLIC_KEY = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD3g+3Y6J/K..."
 
 # Constants for API server identity tests
-API_KEYS_DIR = app.state.PROJECT_ROOT_DIR / "api_keys" # Use the path derived in the app
+API_KEYS_DIR = PROJECT_ROOT_DIR / "api_keys" # Use the directly imported PROJECT_ROOT_DIR
 API_SERVER_ID_PATH = API_KEYS_DIR / "api_server_id.txt"
 API_PRIVATE_KEY_PATH = API_KEYS_DIR / "api_server_key.pem"
 
