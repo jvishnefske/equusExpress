@@ -35,12 +35,16 @@ def setup_teardown_db():
         test_db_path  # Use an env var if server used it, or pass directly
     )
 
-    # Ensure the app uses the test database path during startup for the fixture scope
-    # This might require modifying app initialization if not already flexible.
-    # For now, we'll delete and re-create.
+    # Clean up API keys directory for each test that uses this fixture
+    if API_KEYS_DIR.exists():
+        for item in API_KEYS_DIR.iterdir():
+            if item.is_file():
+                item.unlink()
+        API_KEYS_DIR.rmdir()
+
+    # Clean up the database file
     if os.path.exists(test_db_path):
         os.remove(test_db_path)
-
     # Re-initialize the database
     init_secure_db() # Call init_secure_db which is now from system_api
 
@@ -62,6 +66,12 @@ def setup_teardown_db():
     # Clean up the environment variable too, if set
     if "SQLITE_DB_PATH" in os.environ:
         del os.environ["SQLITE_DB_PATH"]
+    # Also clean up the API keys directory in teardown
+    if API_KEYS_DIR.exists():
+        for item in API_KEYS_DIR.iterdir():
+            if item.is_file():
+                item.unlink()
+        API_KEYS_DIR.rmdir()
 
 
 @pytest.fixture
