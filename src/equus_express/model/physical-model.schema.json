@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/schemas/physical-model.schema.json",
+  "title": "ISA-88 Physical Model",
+  "description": "A schema for defining the hierarchical physical model of a plant, from Process Cell down to Control Modules, compliant with ISA-88.",
+  "type": "object",
+  "$ref": "#/definitions/physicalNode",
+
+  "definitions": {
+    "physicalNode": {
+      "title": "Physical Model Node",
+      "description": "Represents a single element (e.g., Unit, EM, CM) in the physical model hierarchy.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "A unique identifier for this node (UUID recommended).",
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "description": "A human-readable name for the node (e.g., 'BR-101', 'TemperatureControlSystem').",
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "description": "The ISA-88 type of this node.",
+          "type": "string",
+          "enum": [
+            "ProcessCell",
+            "Unit",
+            "EquipmentModule",
+            "ControlModule"
+          ]
+        },
+        "binding": {
+          "description": "The firmware tag or I/O address this node is bound to. ONLY valid for 'ControlModule' type.",
+          "type": "string"
+        },
+        "children": {
+          "description": "An array of child nodes nested under this node.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/physicalNode"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "type"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "const": "ControlModule" } }
+          },
+          "then": {
+            "required": ["binding"],
+            "properties": {
+              "children": false
+            },
+            "description": "If the type is ControlModule, it MUST have a 'binding' and MUST NOT have 'children'."
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "Unit" } }
+          },
+          "then": {
+            "properties": { "binding": false },
+            "description": "If the type is Unit, it MUST NOT have a 'binding'."
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "EquipmentModule" } }
+          },
+          "then": {
+            "properties": { "binding": false },
+            "description": "If the type is EquipmentModule, it MUST NOT have a 'binding'."
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,13 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "yarn.build"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "equus-express"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
+description = "Secure IoT API Server and Device Agent"
+readme = "README.md" # Assumes a README.md at the project root
+authors = [{name = "Your Name", email = "your@email.com"}] # Replace with actual author info
+license = {file = "LICENSE"} # Assumes a LICENSE file at the project root
 requires-python = ">=3.9"
-dependencies = []
-
-[dependency-groups]
-dev = [
-    "coverage>=7.9.2",
-    "pytest-cov>=6.2.1",
+dependencies = [
+    "cryptography>=45.0.5",
+    "fastapi>=0.116.0",
+    "uvicorn>=0.35.0",
+    "jinja2",
+    "httpx",
+    "psutil", # Add psutil if it's a runtime dependency for telemetry
 ]
+
+[tool.setuptools.packages.find]
+where = ["src"] # Specify that packages are found under the 'src' directory
+
+[tool.setuptools.package-data]
+"equus_express" = ["static/*", "templates/*"] # Ensure built static files are included in the wheel
+
+[tool.yarn.build]
+folder = "src/equus_express/frontend"
+install = "yarn install --frozen-lockfile"
+build = "yarn run build"
