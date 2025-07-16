@@ -480,7 +480,7 @@ def test_secure_client_test_connection_get_device_info_failure(
         httpx.RequestError("Device info failed", request=httpx.Request("GET", TEST_BASE_URL)), # for get_device_info
     ]
 
-    with patch('equus_express.client.logger.warning') as mock_warning:
+    with patch('equus_express.edge_device_controller.logger.warning') as mock_warning:
         assert client.test_connection() is True  # Should still return True overall
         mock_warning.assert_called_once_with(
             f"Device info endpoint failed (this might be expected if server requires stronger auth post-registration): Request to server failed: Device info failed"
