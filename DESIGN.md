@@ -35,12 +35,14 @@ We will implement a three-tier architecture that clearly delineates responsibili
     -   Hosts the **Batch Executive**, the engine that interprets and executes recipes.
     -   Provides the REST API for CRUD operations on models and recipes.
     -   Manages the WebSocket-based publish-subscribe (Pub/Sub) hub for real-time communication.
+    -   Leverages **NATS** for all real-time publish-subscribe messaging.
     -   Handles user authentication and Role-Based Access Control (RBAC).
 
 3.  **Control Tier (Microcontroller/Firmware)**
     -   A **Hardware Abstraction Layer (HAL)**. Its sole responsibility is to execute primitive commands and report sensor data/state changes.
     -   It contains **no recipe-specific logic**.
     -   It communicates with the server via a lightweight, real-time protocol (e.g., MQTT or custom protocol over a TCP socket).
+    -   It communicates with the server via **NATS**.
     -   It **must** implement a watchdog timer to fail-safe if server communication is lost.
 
 ---
@@ -138,7 +140,7 @@ This is the output of our graphical Recipe Editor. It represents the procedural 
 | Batches          | `/api/batches`                | POST          | Create & start a batch from a recipe.     |
 | Batch Control    | `/api/batches/{id}/command`   | PUT           | Send commands (HOLD, ABORT) to a batch.   |
 
-#### Publish-Subscribe Topics (Real-Time - Stateful)
+#### NATS Publish-Subscribe Topics (Real-Time - Stateful)
 
 | Topic Name         | Publisher  | Subscriber | Purpose                                       |
 | ------------------ | ---------- | ---------- | --------------------------------------------- |
@@ -156,9 +158,11 @@ This is the output of our graphical Recipe Editor. It represents the procedural 
 
 The firmware's role is simple but critical. It is a **Hardware Abstraction Layer (HAL)**.
 -   It listens for commands on the `command/execute` topic.
+-   It listens for commands on the **NATS** `command/execute` topic.
 -   It maintains the state for each phase (IDLE, RUNNING, HOLDING, etc.).
 -   It translates logical commands into physical I/O operations.
 -   It publishes sensor data on `pvs/update` and phase state changes on `phase/state`.
+-   It publishes sensor data on the **NATS** `pvs/update` topic and phase state changes on the `phase/state` topic.
 -   **It does NOT contain any recipe logic or transition conditions.**
 
 **Example Primitive Functions to Implement:**
@@ -178,6 +182,7 @@ This is the core execution engine on the backend. Its primary loop for a running
     -   Log the transition in the Electronic Batch Record (EBR).
     -   Identify the next step(s).
     -   Send the corresponding command(s) for the new phase(s) to the firmware via the `command/execute` topic.
+    -   Send the corresponding command(s) for the new phase(s) to the firmware via the **NATS** `command/execute` topic.
 5.  Repeat from step 1.
 
 ### 4.3. Frontend: The Graphical Recipe Editor
@@ -208,10 +213,13 @@ This is the most complex UI component. It must be intuitive for non-programmers.
 3.  The **Batch Executive** reads the first step of the recipe (e.g., HEAT phase).
 4.  It sends a command to the `command/execute` topic: `{ "cmd": "HEAT", "params": {"target_temp": 85.0} }`.
 5.  The **Firmware** receives the command, transitions the HEAT phase to `RUNNING`, and begins activating the heater. It publishes the new state on the `phase/state` topic.
+4.  It sends a command to the **NATS** `command/execute` topic: `{ "cmd": "HEAT", "params": {"target_temp": 85.0} }`.
+5.  The **Firmware** receives the command via NATS, transitions the HEAT phase to `RUNNING`, and begins activating the heater. It publishes the new state on the **NATS** `phase/state` topic.
 6.  The **Server** receives the state update and relays it to the **HMI**, which highlights the step as active.
-7.  The **Firmware** continuously publishes temperature updates on `pvs/update`. The HMI displays this data in real-time.
+7.  The **Firmware** continuously publishes temperature updates on the **NATS** `pvs/update` topic. The HMI displays this data in real-time.
 8.  The **Batch Executive** continuously evaluates the transition condition (`BR101.TEMP.PV >= 84.5`).
 9.  Once the temperature is reached, the firmware reports the phase `COMPLETE` on `phase/state`.
+9.  Once the temperature is reached, the firmware reports the phase `COMPLETE` on the **NATS** `phase/state` topic.
 10. The **Batch Executive** sees the `COMPLETE` state, evaluates the transition as `true`, and proceeds to the next step in the recipe. This cycle repeats until the recipe ends.
 
 ---
@@ -227,3 +235,4 @@ This is the most complex UI component. It must be intuitive for non-programmers.
     -   **Database:** A dual-database approach is recommended.
         -   **Relational (PostgreSQL):** For structured configuration data (models, recipes, users).
         -   **Time-Series (TimescaleDB, InfluxDB):** For high-volume process data for the EBR and trend charts.
+    -   **Real-time Messaging:** NATS (for all Pub/Sub communication).
