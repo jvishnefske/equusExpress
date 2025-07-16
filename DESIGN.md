@@ -30,12 +30,14 @@ We will implement a three-tier architecture that clearly delineates responsibili
     -   Hosts the **Batch Executive**, the engine that interprets and executes recipes.
     -   Provides the REST API for CRUD operations on models and recipes.
     -   Manages the WebSocket-based publish-subscribe (Pub/Sub) hub for real-time communication.
-    -   Leverages **NATS** for all real-time publish-subscribe messaging.
+    -   Leverages **NATS** for all real-time publish-subscribe messaging, configured by the `edge_device_controller` using NATS `nkeys` or `tokens`.
     -   Handles user authentication and Role-Based Access Control (RBAC).
+    -   Manages API-to-API provisioning (central host role).
+    -   Acts as a central repository for registered edge System API metadata (requires admin approval for authorization).
 
 3.  **Control Tier (Microcontroller/Firmware)**
     -   A **Hardware Abstraction Layer (HAL)**. Its sole responsibility is to execute primitive commands and report sensor data/state changes.
-    -   It contains **no recipe-specific logic**.
+    -   It contains **no recipe-specific logic**.                                     
     -   It communicates with the server via a lightweight, real-time protocol (e.g., MQTT or custom protocol over a TCP socket).
     -   It communicates with the system_api via **NATS**.
     -   It **must** implement a watchdog timer to fail-safe if server communication is lost.
@@ -131,7 +133,8 @@ This is the output of our graphical Recipe Editor. It represents the procedural 
 | Resource         | Endpoint                      | Method        | Description                               |
 | ---------------- | ----------------------------- | ------------- | ----------------------------------------- |
 | Physical Model   | `/api/physical-models`        | GET, POST     | List or create physical asset hierarchies.|
-| Recipes          | `/api/recipes`                | GET, POST     | List or create master recipe templates.   |
+| Recipes          | `/api/recipes`                | GET, POST     | List or create master recipe templates.   |\ No newline at end of file
+| API Provisioning | `/api/provision/request`      | POST          | Request authorization for a new edge System API instance. |
 | Batches          | `/api/batches`                | POST          | Create & start a batch from a recipe.     |
 | Batch Control    | `/api/batches/{id}/command`   | PUT           | Send commands (HOLD, ABORT) to a batch.   |
 
@@ -215,11 +218,19 @@ This is the most complex UI component. It must be intuitive for non-programmers.
 10. The **Batch Executive** sees the `COMPLETE` state, evaluates the transition as `true`, and proceeds to the next step in the recipe. This cycle repeats until the recipe ends.
 
 
+
+| Topic Name         | Publisher  | Subscriber | Purpose                                       |
+| ------------------ | ---------- | ---------- | --------------------------------------------- |
+\ No newline at end of file
+
+@@ -194,9 +207,17 @@
 ---
 
 ## 6. Non-Functional Requirements & Technology
-
 -   **Security**: **Role-Based Access Control (RBAC) is mandatory**. At minimum: Administrator, Engineer, Operator. All communication must be encrypted (HTTPS/WSS/TLS).
+-   **Security**: **Role-Based Access Control (RBAC) is mandatory**. At minimum: Administrator, Engineer, Operator. All communication must be encrypted (HTTPS/WSS/TLS).
+    -   **API Identity & Provisioning**: Each `system_api` instance will have a persistent, locally generated UUID and a corresponding private key. These identifiers and keys are *never* stored in version control; if a valid UUID/private key pair is not found in local storage, a new one will be generated. The last byte of the UUID *may* be used as a 7-bit SMBus address for local device interactions.
+    -   A public-facing API endpoint (`/api/provision/request`) allows new `system_api` instances (e.g., edge deployments) to request registration with a central `system_api`. All such provisioning requests are stored on the central host, and authorization of new API accounts requires explicit administrator approval. Once authorized, these `system_api` instances will be visible on the central host's interface, alongside any locally connected `edge_device_controller` clients.
 -   **Reliability**: **Firmware watchdog is non-negotiable**. If communication is lost, the firmware must transition hardware to a pre-defined safe state.
 -   **Data Integrity**: The system **must** generate an immutable **Electronic Batch Record (EBR)** for every batch, logging all operator commands, state changes, alarms, and periodic PV snapshots.
 -   **Technology Stack Recommendation**:
