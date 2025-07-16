@@ -9,13 +9,18 @@ import os
 import sqlite3
 import json
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 import logging
 from pydantic import BaseModel
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa # New import for RSA key generation
+from cryptography.hazmat.backends import default_backend # New import for cryptography backend
 import socket
 from contextlib import asynccontextmanager, ExitStack  # Added ExitStack
+import uuid # New import for UUID generation
+import pathlib # New import for path manipulation
+
 import importlib.resources as pkg_resources  # New import for importlib.resources
 import tempfile  # New import for temporary directory creation
 import shutil  # New import for copying files
@@ -31,14 +36,18 @@ current_file_dir = os.path.dirname(os.path.abspath(__file__))
 # From 'src/equus_express', go up two levels:
 # '../' (to 'src/')
 # '../' (to 'project_root/')
-PROJECT_ROOT_DIR = os.path.abspath(os.path.join(current_file_dir, "..", ".."))
+# Use pathlib for robust path handling
+PROJECT_ROOT_DIR = pathlib.Path(current_file_dir).parent.parent
+
+# Directory for the API server's own keys and GUID
+API_KEYS_DIR = PROJECT_ROOT_DIR / "api_keys"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Handles startup and shutdown events for the application.
-    Initializes the database on startup and sets up static file serving.
+    Initializes the database, sets up API server identity, and static file serving.
     """
     logger.info("Application starting up...")
     init_secure_db()
@@ -46,6 +55,7 @@ async def lifespan(app: FastAPI):
     # Use ExitStack to manage the lifecycle of temporary resources (e.g., extracted static files)
     # This ensures cleanup on application shutdown.
     app.state.temp_resource_manager = ExitStack()
+    init_api_server_identity(app) # Initialize API server's own identity (GUID, private key)
 
     try:
         # Handle static files: they are now located INSIDE the 'equus_express' package.
@@ -145,6 +155,13 @@ class PublicKeyRegistration(BaseModel):
     public_key: str
 
 
+class APIProvisionRequest(BaseModel):
+    requesting_api_id: str # UUID of the requesting API server
+    public_key: str # Public key of the requesting API server
+    contact_email: Optional[str] = None # Optional contact for admin approval
+    notes: Optional[str] = None # Any additional notes for the request
+
+
 # Database initialization
 def init_secure_db():
     """Initialize the secure database for device management"""
@@ -172,13 +189,18 @@ def init_secure_db():
                        DEFAULT
                        CURRENT_TIMESTAMP,
                        status
-                       TEXT
+                       TEXT # Status for edge devices (online, offline, etc.)
+                       DEFAULT
+                       'unknown',
                        DEFAULT
                        'unknown',
                        ip_address
                        TEXT,
                        device_info
                        TEXT
+                       DEFAULT
+                       '{}',
+                       type TEXT DEFAULT 'edge_device' -- 'edge_device' or 'api_server'
                    )
                    """
     )
@@ -278,6 +300,60 @@ def init_secure_db():
 
     conn.commit()
     conn.close()
+
+
+def init_api_server_identity(app: FastAPI):
+    """
+    Initializes or loads the API server's unique GUID and private key.
+    Stores them in app.state for later use (e.g., for server-to-server authentication).
+    """
+    API_KEYS_DIR.mkdir(parents=True, exist_ok=True)
+    server_id_path = API_KEYS_DIR / "api_server_id.txt"
+    private_key_path = API_KEYS_DIR / "api_server_key.pem"
+
+    server_id = None
+    private_key = None
+
+    try:
+        if server_id_path.exists() and private_key_path.exists():
+            # Load existing identity
+            with open(server_id_path, "r") as f:
+                server_id = f.read().strip()
+            with open(private_key_path, "rb") as f:
+                private_key_bytes = f.read()
+            private_key = serialization.load_pem_private_key(
+                private_key_bytes, password=None, backend=default_backend()
+            )
+            logger.info("Loaded existing API server identity.")
+        else:
+            # Generate new identity
+            server_id = str(uuid.uuid4())
+            private_key = rsa.generate_private_key(
+                public_exponent=65537, key_size=2048, backend=default_backend()
+            )
+            private_key_bytes = private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+
+            with open(server_id_path, "w") as f:
+                f.write(server_id)
+            with open(private_key_path, "wb") as f:
+                f.write(private_key_bytes)
+
+            logger.info(f"Generated new API server identity: {server_id}")
+
+        app.state.api_server_id = server_id
+        app.state.api_private_key = private_key
+        app.state.api_public_key_pem = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ).decode("utf-8")
+
+    except Exception as e:
+        logger.error(f"Failed to initialize API server identity: {e}")
+        raise RuntimeError(f"Failed to initialize API server identity: {e}")
 
 
 def dp_path():
@@ -668,6 +744,49 @@ async def get_device_config(
         )
 
 
+@app.post("/api/provision/request")
+async def provision_request(provision_data: APIProvisionRequest, request: Request):
+    """
+    Endpoint for another system_api instance (e.g., an edge deployment) to request
+    provisioning and authorization with this central system_api instance.
+    Requests are stored for administrator approval.
+    """
+    requesting_api_id = provision_data.requesting_api_id
+    public_key = provision_data.public_key
+    contact_email = provision_data.contact_email
+    notes = provision_data.notes
+    client_ip = request.client.host
+
+    try:
+        db_file = dp_path()
+        conn = sqlite3.connect(db_file)
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            INSERT INTO api_provision_requests
+            (request_id, requesting_api_id, public_key, contact_email, notes, requested_at, status, ip_address)
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
+            """,
+            (
+                str(uuid.uuid4()), # Generate a new UUID for the request itself
+                requesting_api_id,
+                public_key,
+                contact_email,
+                notes,
+                "pending",
+                client_ip,
+            ),
+        )
+        conn.commit()
+        conn.close()
+        logger.info(f"Received API provisioning request from {repr(requesting_api_id)} at {client_ip}.")
+        return {"status": "success", "message": "Provisioning request submitted. Awaiting administrator approval."}
+    except Exception as e:
+        logger.error(f"Failed to process API provisioning request from {repr(requesting_api_id)}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to submit provisioning request: {e}")
+
+
 @app.get("/api/admin/devices")
 async def list_devices():
     """List all devices (admin endpoint)"""
@@ -677,7 +796,7 @@ async def list_devices():
         cursor = conn.cursor()
         cursor.execute(
             """
-                       SELECT device_id, first_seen, last_seen, status, ip_address
+                       SELECT device_id, first_seen, last_seen, status, ip_address, type
                        FROM devices
                        ORDER BY last_seen DESC
                        """

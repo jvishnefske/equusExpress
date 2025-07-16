@@ -15,6 +15,13 @@ client = TestClient(app)
 TEST_DEVICE_ID = "test_device_001"
 TEST_PUBLIC_KEY = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD3g+3Y6J/K..."
 
+# Constants for API server identity tests
+API_KEYS_DIR = app.state.PROJECT_ROOT_DIR / "api_keys" # Use the path derived in the app
+API_SERVER_ID_PATH = API_KEYS_DIR / "api_server_id.txt"
+API_PRIVATE_KEY_PATH = API_KEYS_DIR / "api_server_key.pem"
+
+MOCK_API_SERVER_ID = "00000000-0000-4000-8000-000000000001"
+
 
 @pytest.fixture(autouse=True)
 def setup_teardown_db():
@@ -41,11 +48,148 @@ def setup_teardown_db():
     yield
 
     # Teardown: Close connection and remove the test database file
+    conn = sqlite3.connect(test_db_path)
+    cursor = conn.cursor()
+    cursor.execute("DROP TABLE IF EXISTS devices")
+    cursor.execute("DROP TABLE IF EXISTS telemetry")
+    cursor.execute("DROP TABLE IF EXISTS device_status")
+    cursor.execute("DROP TABLE IF EXISTS device_config")
+    cursor.execute("DROP TABLE IF EXISTS api_provision_requests") # Drop new table
+    conn.commit()
+    conn.close()
     if os.path.exists(test_db_path):
         os.remove(test_db_path)
     # Clean up the environment variable too, if set
     if "SQLITE_DB_PATH" in os.environ:
         del os.environ["SQLITE_DB_PATH"]
+
+
+@pytest.fixture
+def mock_api_identity_generation():
+    """Mocks UUID and crypto functions for API server identity generation."""
+    mock_uuid = MagicMock()
+    mock_uuid.uuid4.return_value = MOCK_API_SERVER_ID
+
+    mock_private_key = MagicMock()
+    mock_public_key_pem = b"-----BEGIN PUBLIC KEY-----MOCK_API_PUBLIC_KEY-----END PUBLIC KEY-----"
+    mock_private_key.private_bytes.return_value = (
+        b"-----BEGIN PRIVATE KEY-----MOCK_API_PRIVATE_KEY-----END PRIVATE KEY-----"
+    )
+    mock_private_key.public_key.return_value.public_bytes.return_value = mock_public_key_pem
+
+    with (
+        patch("equus_express.system_api.uuid", mock_uuid),
+        patch("equus_express.system_api.rsa.generate_private_key", return_value=mock_private_key),
+        patch("equus_express.system_api.serialization") as mock_serialization,
+        patch("equus_express.system_api.default_backend"),
+        patch("equus_express.system_api.pathlib.Path.exists", side_effect=[False, False]), # For initial generation
+        patch("equus_express.system_api.pathlib.Path.mkdir"),
+        patch("builtins.open", new_callable=mock_open) as mock_file_open,
+    ):
+        # Configure mock_serialization for PEM encoding/decryption
+        mock_serialization.Encoding.PEM = MagicMock()
+        mock_serialization.PrivateFormat.PKCS8 = MagicMock()
+        mock_serialization.NoEncryption.return_value = MagicMock()
+        mock_serialization.PublicFormat.SubjectPublicKeyInfo = MagicMock()
+        mock_serialization.load_pem_private_key.return_value = mock_private_key # For loading
+
+        yield {
+            "mock_uuid": mock_uuid,
+            "mock_generate_private_key": rsa.generate_private_key, # Original patched object
+            "mock_private_key": mock_private_key,
+            "mock_file_open": mock_file_open,
+            "mock_exists": pathlib.Path.exists,
+        }
+
+
+@pytest.fixture
+def mock_api_identity_loading():
+    """Mocks UUID and crypto functions for API server identity loading."""
+    mock_uuid = MagicMock()
+    mock_uuid.uuid4.return_value = MOCK_API_SERVER_ID # Even if not called, ensures consistency
+
+    mock_private_key = MagicMock()
+    mock_public_key_pem = b"-----BEGIN PUBLIC KEY-----MOCK_API_PUBLIC_KEY-----END PUBLIC KEY-----"
+    mock_private_key.private_bytes.return_value = (
+        b"-----BEGIN PRIVATE KEY-----MOCK_API_PRIVATE_KEY-----END PRIVATE KEY-----"
+    )
+    mock_private_key.public_key.return_value.public_bytes.return_value = mock_public_key_pem
+
+    # Simulate files existing for loading scenario
+    mock_open_instance = mock_open()
+    mock_open_instance.return_value.__enter__.return_value.read.side_effect = [
+        MOCK_API_SERVER_ID, # for api_server_id.txt
+    ]
+    mock_open_instance.return_value.__enter__.return_value.read.return_value = b"mock_private_key_pem" # for api_server_key.pem
+
+    with (
+        patch("equus_express.system_api.uuid", mock_uuid),
+        patch("equus_express.system_api.rsa.generate_private_key"), # Should not be called
+        patch("equus_express.system_api.serialization") as mock_serialization,
+        patch("equus_express.system_api.default_backend"),
+        patch("equus_express.system_api.pathlib.Path.exists", side_effect=[True, True]), # Simulate files existing
+        patch("equus_express.system_api.pathlib.Path.mkdir"),
+        patch("builtins.open", new_callable=mock_open) as mock_file_open,
+    ):
+        # Configure mock_serialization for PEM encoding/decryption
+        mock_serialization.Encoding.PEM = MagicMock()
+        mock_serialization.PrivateFormat.PKCS8 = MagicMock()
+        mock_serialization.NoEncryption.return_value = MagicMock()
+        mock_serialization.PublicFormat.SubjectPublicKeyInfo = MagicMock()
+        mock_serialization.load_pem_private_key.return_value = mock_private_key # This will be called
+
+        yield {
+            "mock_uuid": mock_uuid,
+            "mock_generate_private_key": rsa.generate_private_key, # Original patched object
+            "mock_private_key": mock_private_key,
+            "mock_file_open": mock_file_open,
+            "mock_exists": pathlib.Path.exists,
+            "mock_serialization": mock_serialization,
+        }
+
+
+def test_api_server_identity_generated_on_startup(setup_teardown_db, mock_api_identity_generation):
+    """Test that API server identity (GUID and keys) is generated on startup if not present."""
+    mock_crypto = mock_api_identity_generation
+    with TestClient(app) as client:
+        # Perform a request to trigger lifespan
+        response = client.get("/health")
+        assert response.status_code == 200
+
+    # Assert generation occurred
+    mock_crypto["mock_generate_private_key"].assert_called_once()
+    mock_crypto["mock_uuid"].uuid4.assert_called_once()
+
+    # Assert files were written
+    mock_crypto["mock_file_open"].assert_any_call(str(API_SERVER_ID_PATH), "w")
+    mock_crypto["mock_file_open"].assert_any_call(str(API_PRIVATE_KEY_PATH), "wb")
+
+    # Assert that app.state was populated
+    assert app.state.api_server_id == MOCK_API_SERVER_ID
+    assert app.state.api_private_key is not None
+    assert "MOCK_API_PUBLIC_KEY" in app.state.api_public_key_pem
+
+
+def test_api_server_identity_loaded_on_startup(setup_teardown_db, mock_api_identity_loading):
+    """Test that API server identity (GUID and keys) is loaded on startup if present."""
+    mock_crypto = mock_api_identity_loading
+
+    # Mock file content for loading
+    m_open_instance = mock_crypto["mock_file_open"].return_value.__enter__.return_value
+    m_open_instance.read.side_effect = [
+        MOCK_API_SERVER_ID, # Content for api_server_id.txt
+        b"-----BEGIN PRIVATE KEY-----MOCK_PRIVATE_KEY_LOADED-----END PRIVATE KEY-----", # Content for api_server_key.pem
+    ]
+
+    with TestClient(app) as client:
+        response = client.get("/health")
+        assert response.status_code == 200
+
+    # Assert loading occurred, not generation
+    mock_crypto["mock_generate_private_key"].assert_not_called()
+    mock_crypto["mock_serialization"].load_pem_private_key.assert_called_once()
+    assert app.state.api_server_id == MOCK_API_SERVER_ID
+    assert app.state.api_private_key is not None
 
 
 # Fixture to mock sqlite3.connect for error scenarios
@@ -533,6 +677,58 @@ def test_get_device_telemetry_unexpected_error():
         response = client.get(f"/api/admin/telemetry/{TEST_DEVICE_ID}")
     assert response.status_code == 500
     assert "Failed to retrieve telemetry" in response.json()["detail"]
+
+
+def test_api_provision_request_success():
+    """Test the /api/provision/request endpoint successfully submits a request."""
+    request_data = {
+        "requesting_api_id": "api-server-123",
+        "public_key": "ssh-rsa API_PUBLIC_KEY_123...",
+        "contact_email": "admin@example.com",
+        "notes": "Request for edge API",
+    }
+    response = client.post("/api/provision/request", json=request_data)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    assert "Provisioning request submitted. Awaiting administrator approval." in response.json()["message"]
+
+    # Verify data in api_provision_requests table
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT requesting_api_id, public_key, contact_email, notes, status, ip_address FROM api_provision_requests WHERE requesting_api_id = ?", ("api-server-123",))
+    record = cursor.fetchone()
+    conn.close()
+
+    assert record is not None
+    assert record[0] == "api-server-123"
+    assert record[1] == "ssh-rsa API_PUBLIC_KEY_123..."
+    assert record[2] == "admin@example.com"
+    assert record[3] == "Request for edge API"
+    assert record[4] == "pending"
+    assert record[5] is not None # ip_address should be captured
+
+
+def test_api_provision_request_missing_fields():
+    """Test /api/provision/request with missing required fields."""
+    response = client.post("/api/provision/request", json={"public_key": "abc"})
+    assert response.status_code == 422
+    assert "requesting_api_id" in response.json()["detail"][0]["loc"]
+
+    response = client.post("/api/provision/request", json={"requesting_api_id": "abc"})
+    assert response.status_code == 422
+    assert "public_key" in response.json()["detail"][0]["loc"]
+
+
+def test_api_provision_request_db_error(mock_db_error):
+    """Test /api/provision/request handles database errors."""
+    request_data = {
+        "requesting_api_id": "api-server-123",
+        "public_key": "ssh-rsa API_PUBLIC_KEY_123..."
+    }
+    response = client.post("/api/provision/request", json=request_data)
+    assert response.status_code == 500
+    assert "Failed to submit provisioning request" in response.json()["detail"]
 
 
 def test_favicon_not_found():
