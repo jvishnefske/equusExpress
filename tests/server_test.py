@@ -23,7 +23,6 @@ API_KEYS_DIR = PROJECT_ROOT_DIR / "api_keys" # Use the directly imported PROJECT
 API_SERVER_ID_PATH = API_KEYS_DIR / "api_server_id.txt"
 API_PRIVATE_KEY_PATH = API_KEYS_DIR / "api_server_key.pem"
 
-MOCK_API_SERVER_ID = "00000000-0000-4000-8000-000000000001"
 
 
 # Helper function for patching pathlib.Path.exists
@@ -39,7 +38,17 @@ def _mock_path_exists_side_effect_factory(initial_values):
         except StopIteration: return True # Default to True after initial values exhausted
     return mock_method
 
-MOCK_API_SERVER_ID = "00000000-0000-4000-8000-000000000001"
+
+# New autouse fixture to patch pathlib.Path.exists globally for all tests
+@pytest.fixture(autouse=True)
+def patch_pathlib_exists_global():
+    """
+    Patches pathlib.Path.exists globally to return True by default.
+    Specific fixtures can then override its side_effect for their needs.
+    """
+    # Start with a default that always returns True, covering general pytest operations
+    with patch.object(pathlib.Path, 'exists', MagicMock(side_effect=lambda: True)) as mock_exists:
+        yield mock_exists
 
 
 @pytest.fixture(autouse=True)
@@ -94,7 +103,7 @@ def setup_teardown_db():
 
 
 @pytest.fixture
-def mock_api_identity_generation():
+def mock_api_identity_generation(patch_pathlib_exists_global):
     """Mocks UUID and crypto functions for API server identity generation."""
     mock_uuid = MagicMock()
     mock_uuid.uuid4.return_value = MOCK_API_SERVER_ID
@@ -106,12 +115,16 @@ def mock_api_identity_generation():
     )
     mock_private_key.public_key.return_value.public_bytes.return_value = mock_public_key_pem
 
+    # Set the specific side effect for the `exists()` calls within init_api_server_identity
+    # These are the *only* calls to pathlib.Path.exists that we explicitly care to control.
+    patch_pathlib_exists_global.side_effect = _mock_path_exists_side_effect_factory([False, False])
+
     with (
         patch.object(pathlib.Path, 'exists', MagicMock(side_effect=_mock_path_exists_side_effect_factory([False, False]))), # Apply patch globally for Path.exists
+        patch("equus_express.system_api.uuid", mock_uuid), # Patch uuid module used in system_api
         patch("equus_express.system_api.rsa.generate_private_key", return_value=mock_private_key),
         patch("equus_express.system_api.serialization") as mock_serialization,
         patch("equus_express.system_api.default_backend"),
-        patch("equus_express.system_api.pathlib.Path.exists", side_effect=[False, False]), # For initial generation
         patch("equus_express.system_api.pathlib.Path.mkdir"),
         patch("builtins.open", new_callable=mock_open) as mock_file_open,
     ):
@@ -119,20 +132,21 @@ def mock_api_identity_generation():
         mock_serialization.Encoding.PEM = MagicMock() # For init_api_server_identity which calls this
         mock_serialization.PrivateFormat.PKCS8 = MagicMock()
         mock_serialization.NoEncryption.return_value = MagicMock()
-        mock_serialization.PublicFormat.SubjectPublicKeyInfo = MagicMock()
+        mock_serialization.PublicFormat.SubjectPublicKeyInfo = MagicMock() # For init_api_server_identity
+        mock_serialization.load_pem_private_key.return_value = mock_private_key # For init_api_server_identity
         mock_serialization.load_pem_private_key.return_value = mock_private_key # For init_api_server_identity which calls this
 
         yield {
             "mock_uuid": mock_uuid,
-            "mock_generate_private_key": rsa.generate_private_key, # Original patched object
+            "mock_generate_private_key": rsa.generate_private_key,
             "mock_private_key": mock_private_key,
             "mock_file_open": mock_file_open,
-            "mock_exists": pathlib.Path.exists,
+            "mock_exists": patch_pathlib_exists_global, # Expose the global mock for assertions if needed
         }
 
 
 @pytest.fixture
-def mock_api_identity_loading():
+def mock_api_identity_loading(patch_pathlib_exists_global):
     """Mocks UUID and crypto functions for API server identity loading."""
     mock_uuid = MagicMock()
     mock_uuid.uuid4.return_value = MOCK_API_SERVER_ID # Even if not called, ensures consistency
@@ -144,19 +158,21 @@ def mock_api_identity_loading():
     )
     mock_private_key.public_key.return_value.public_bytes.return_value = mock_public_key_pem
 
+    # Set the specific side effect for the `exists()` calls within init_api_server_identity
+    patch_pathlib_exists_global.side_effect = _mock_path_exists_side_effect_factory([True, True])
+
     # Simulate files existing for loading scenario
     mock_open_instance = mock_open()
     mock_open_instance.return_value.__enter__.return_value.read.side_effect = [
         MOCK_API_SERVER_ID, # for api_server_id.txt
     ]
     mock_open_instance.return_value.__enter__.return_value.read.return_value = b"mock_private_key_pem" # for api_server_key.pem
-
     with (
         patch.object(pathlib.Path, 'exists', MagicMock(side_effect=_mock_path_exists_side_effect_factory([True, True]))), # Apply patch globally for Path.exists
+        patch("equus_express.system_api.uuid", mock_uuid), # Patch uuid module used in system_api
         patch("equus_express.system_api.rsa.generate_private_key"), # Should not be called
         patch("equus_express.system_api.serialization") as mock_serialization,
         patch("equus_express.system_api.default_backend"),
-        patch("equus_express.system_api.pathlib.Path.exists", side_effect=[True, True]), # Simulate files existing
         patch("equus_express.system_api.pathlib.Path.mkdir"),
         patch("builtins.open", new_callable=mock_open) as mock_file_open,
     ):
@@ -164,12 +180,13 @@ def mock_api_identity_loading():
         mock_serialization.Encoding.PEM = MagicMock() # For init_api_server_identity which calls this
         mock_serialization.PrivateFormat.PKCS8 = MagicMock()
         mock_serialization.NoEncryption.return_value = MagicMock()
-        mock_serialization.PublicFormat.SubjectPublicKeyInfo = MagicMock()
+        mock_serialization.PublicFormat.SubjectPublicKeyInfo = MagicMock() # For init_api_server_identity
+        mock_serialization.load_pem_private_key.return_value = mock_private_key # For init_api_server_identity
         mock_serialization.load_pem_private_key.return_value = mock_private_key # This will be called
 
         yield {
             "mock_uuid": mock_uuid,
-            "mock_generate_private_key": rsa.generate_private_key, # Original patched object
+            "mock_generate_private_key": rsa.generate_private_key,
             "mock_private_key": mock_private_key,
             "mock_file_open": mock_file_open,
             "mock_exists": pathlib.Path.exists,
