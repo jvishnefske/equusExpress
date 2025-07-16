@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, MagicMock, mock_open, AsyncMock
 from datetime import datetime, timezone
 import httpx
 # Import the classes to be tested
@@ -45,7 +45,13 @@ def mock_crypto():
     # Mock methods for Ed25519PrivateKey
     mock_private_key.public_key.return_value = mock_public_key
     mock_private_key.private_bytes.return_value = MOCK_ED25519_PRIVATE_KEY_PEM
-    mock_private_key.sign.return_value = b"mock_signature" # Mock the sign method
+
+    # Mock the sign method to return a mock object that has a .hex() method
+    mock_signature_bytes = b"mock_signature"
+    mock_signature_hex = mock_signature_bytes.hex()
+    mock_signature_result = MagicMock()
+    mock_signature_result.hex.return_value = mock_signature_hex
+    mock_private_key.sign.return_value = mock_signature_result
 
     # Mock methods for Ed25519PublicKey (VerifyKey)
     mock_public_key.public_bytes.return_value = MOCK_ED25519_PUBLIC_KEY_OPENSSH
@@ -89,6 +95,7 @@ def mock_crypto():
             "mock_open": m_open,
             "mock_os_path_exists": mock_os_path_exists,
             "mock_os_makedirs": mock_os_makedirs,
+            "mock_signature_hex": mock_signature_hex, # Pass this to tests
         }
 
 
@@ -98,16 +105,40 @@ def mock_httpx_client():
     with patch("equus_express.edge_device_controller.httpx.Client") as MockClient:
         mock_client_instance = MockClient.return_value
         # Default mock response for success
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
+        mock_response_success = MagicMock()
+        mock_response_success.status_code = 200
+        mock_response_success.json.return_value = {
             "status": "success",
             "message": "Mocked response",
         }
-        mock_response.raise_for_status.return_value = (
+        mock_response_success.raise_for_status.return_value = (
             None  # No HTTP errors by default
         )
-        mock_client_instance.request.return_value = mock_response
+
+        mock_response_health = MagicMock()
+        mock_response_health.status_code = 200
+        mock_response_health.json.return_value = {"status": "healthy"}
+        mock_response_health.raise_for_status.return_value = None
+
+        mock_response_device_info = MagicMock()
+        mock_response_device_info.status_code = 200
+        mock_response_device_info.json.return_value = {"device_id": TEST_DEVICE_ID}
+        mock_response_device_info.raise_for_status.return_value = None
+
+        # Configure side_effect for request to return different mock responses
+        # This list will be consumed sequentially by calls to .request()
+        mock_client_instance.request.side_effect = [
+            mock_response_success, # Default for first call if not overridden
+            mock_response_success, # Default for second call
+            mock_response_success, # Default for third call
+            mock_response_success, # Default for fourth call
+            mock_response_success, # Default for fifth call
+            mock_response_success, # Default for sixth call
+            mock_response_success, # Default for seventh call
+            mock_response_success, # Default for eighth call
+            mock_response_success, # Default for ninth call
+            mock_response_success, # Default for tenth call
+        ]
         yield mock_client_instance
 
 
@@ -176,17 +207,21 @@ def mock_device_agent_dependencies():
         mock_nats_client_instance = MockNATSClient.return_value
 
         # Configure the mock client methods that DeviceAgent calls by default for success paths
-        mock_client_instance.send_telemetry.return_value = {"status": "success"}
-        mock_client_instance.update_status.return_value = {"status": "success"}
-        mock_client_instance.register_device.return_value = {"status": "success"}
+        mock_client_instance.send_telemetry.return_value = AsyncMock(return_value={"status": "success"})
+        mock_client_instance.update_status.return_value = AsyncMock(return_value={"status": "success"})
+        mock_client_instance.register_device.return_value = {"status": "success"} # This is not awaited in agent.start
         mock_client_instance.device_id = TEST_DEVICE_ID # Ensure device_id is set on mock client
         mock_client_instance._get_ip_address.return_value = MOCK_IP_ADDRESS # Mock internal IP method
 
         # Configure mock NATS client methods
-        mock_nats_client_instance.connect.return_value = None
-        mock_nats_client_instance.disconnect.return_value = None
-        mock_nats_client_instance.publish.return_value = None
-        mock_nats_client_instance.subscribe.return_value = MagicMock() # Return a mock subscription ID
+        mock_nats_client_instance.connect.return_value = AsyncMock()
+        mock_nats_client_instance.disconnect.return_value = AsyncMock()
+        mock_nats_client_instance.publish.return_value = AsyncMock()
+        mock_nats_client_instance.subscribe.return_value = AsyncMock() # Return a mock subscription ID
+
+        # Configure asyncio.sleep to return awaitable mocks or raise CancelledError
+        mock_asyncio_sleep.side_effect = [AsyncMock(), AsyncMock(), asyncio.CancelledError]
+
 
         yield {
             "MockClient": MockClient,
@@ -229,18 +264,16 @@ def test_secure_client_initialization_loads_keys(
     mock_crypto["mock_serialization"].load_ssh_public_key.assert_called_once()
 
 
-def test_secure_client_init_os_error(tmp_key_dir, mock_crypto, mock_httpx_client):
+def test_secure_client_init_os_error(tmp_key_dir):
     """Test that SecureAPIClient initialization handles OSError during key operations."""
-    # Simulate an OSError during os.makedirs
-    mock_crypto["mock_os_makedirs"].side_effect = OSError("Disk full")
-
-    with pytest.raises(RuntimeError, match="Failed to initialize client keys"):
-        SecureAPIClient(
-            base_url=TEST_BASE_URL,
-            device_id=TEST_DEVICE_ID,
-            key_dir=tmp_key_dir,
-        )
-    mock_crypto["mock_os_makedirs"].assert_called_once_with(tmp_key_dir, exist_ok=True)
+    with patch("equus_express.edge_device_controller.os.makedirs", side_effect=OSError("Disk full")) as mock_makedirs:
+        with pytest.raises(RuntimeError, match="Failed to initialize client keys"):
+            SecureAPIClient(
+                base_url=TEST_BASE_URL,
+                device_id=TEST_DEVICE_ID,
+                key_dir=tmp_key_dir,
+            )
+        mock_makedirs.assert_called_once_with(tmp_key_dir, exist_ok=True)
 
 
 def test_secure_client_register_device_no_public_key(mock_httpx_client, tmp_key_dir):
@@ -268,7 +301,7 @@ def test_secure_client_register_device_network_error(mock_httpx_client, secure_c
 
 
 def test_secure_client_make_request_success(
-    mock_httpx_client, secure_client_keys_exist
+    mock_httpx_client, secure_client_keys_exist, mock_crypto
 ):
     """Test _make_request for a successful response."""
     response_data = {"key": "value"}
@@ -279,7 +312,9 @@ def test_secure_client_make_request_success(
     result = client.get("/test")
 
     mock_httpx_client.request.assert_called_with(
-        "GET", f"{TEST_BASE_URL}/test", headers={"X-Device-ID": TEST_DEVICE_ID, "X-Signature": "mock_signature"}
+        "GET",
+        f"{TEST_BASE_URL}/test",
+        headers={"X-Device-ID": TEST_DEVICE_ID, "X-Signature": mock_crypto["mock_signature_hex"]}
     )
     assert result.json() == response_data
 
@@ -346,7 +381,7 @@ def test_secure_client_make_request_http_error(
 
 
 def test_secure_client_register_device(
-    mock_httpx_client, secure_client_keys_exist, mock_ip_address
+    mock_httpx_client, secure_client_keys_exist, mock_ip_address, mock_crypto
 ):
     """Test register_device sends correct payload."""
     client = secure_client_keys_exist
@@ -360,23 +395,30 @@ def test_secure_client_register_device(
             "ip_address": MOCK_IP_ADDRESS
         },
         data=None,
+        headers={
+            "X-Device-ID": TEST_DEVICE_ID,
+            "X-Signature": mock_crypto["mock_signature_hex"],
+            "Content-Type": "application/json"
+        }
     )
     mock_ip_address.assert_called_once()
 
 
 def test_secure_client_health_check(
-    mock_httpx_client, secure_client_keys_exist
+    mock_httpx_client, secure_client_keys_exist, mock_crypto
 ):
     """Test health_check calls the correct endpoint."""
     client = secure_client_keys_exist
     client.health_check()
     mock_httpx_client.request.assert_called_with(
-        "GET", f"{TEST_BASE_URL}/health", headers={"X-Device-ID": TEST_DEVICE_ID, "X-Signature": "mock_signature"}
+        "GET",
+        f"{TEST_BASE_URL}/health",
+        headers={"X-Device-ID": TEST_DEVICE_ID, "X-Signature": mock_crypto["mock_signature_hex"]}
     )
 
 
 def test_secure_client_send_telemetry(
-    mock_httpx_client, secure_client_keys_exist
+    mock_httpx_client, secure_client_keys_exist, mock_crypto
 ):
     """Test send_telemetry sends correct payload."""
     client = secure_client_keys_exist
@@ -392,23 +434,29 @@ def test_secure_client_send_telemetry(
             "data": test_data,
         },
         data=None,
-        headers={"X-Device-ID": TEST_DEVICE_ID, "X-Signature": "mock_signature"}
+        headers={
+            "X-Device-ID": TEST_DEVICE_ID,
+            "X-Signature": mock_crypto["mock_signature_hex"],
+            "Content-Type": "application/json"
+        }
     )
 
 
 def test_secure_client_get_configuration(
-    mock_httpx_client, secure_client_keys_exist
+    mock_httpx_client, secure_client_keys_exist, mock_crypto
 ):
     """Test get_configuration calls the correct endpoint."""
     client = secure_client_keys_exist
     client.get_configuration()
     mock_httpx_client.request.assert_called_with(
-        "GET", f"{TEST_BASE_URL}/api/device/{TEST_DEVICE_ID}/config", headers={"X-Device-ID": TEST_DEVICE_ID, "X-Signature": "mock_signature"}
+        "GET",
+        f"{TEST_BASE_URL}/api/device/{TEST_DEVICE_ID}/config",
+        headers={"X-Device-ID": TEST_DEVICE_ID, "X-Signature": mock_crypto["mock_signature_hex"]}
     )
 
 
 def test_secure_client_update_status(
-    mock_httpx_client, secure_client_keys_exist
+    mock_httpx_client, secure_client_keys_exist, mock_crypto
 ):
     """Test update_status sends correct payload."""
     client = secure_client_keys_exist
@@ -426,7 +474,11 @@ def test_secure_client_update_status(
             "details": test_details,
         },
         data=None,
-        headers={"X-Device-ID": TEST_DEVICE_ID, "X-Signature": "mock_signature"}
+        headers={
+            "X-Device-ID": TEST_DEVICE_ID,
+            "X-Signature": mock_crypto["mock_signature_hex"],
+            "Content-Type": "application/json"
+        }
     )
 
 
@@ -434,15 +486,16 @@ def test_secure_client_test_connection_success(
     mock_httpx_client,
     secure_client_keys_exist,
     mock_ip_address, # Added mock_ip_address
+    mock_crypto # Added mock_crypto to access mock_signature_hex
 ):
     """Test test_connection success path."""
     client = secure_client_keys_exist
     # Ensure nested calls return success
-    mock_httpx_client.request.return_value.json.side_effect = [
-        {"status": "healthy"},  # For health_check
-        {"status": "success", "message": "registered"},  # For register_device
-        {"device_id": TEST_DEVICE_ID},  # For get_device_info
-        {"status": "success"}, # For send_telemetry
+    mock_httpx_client.request.side_effect = [
+        MagicMock(status_code=200, json=lambda: {"status": "healthy"}, raise_for_status=MagicMock()),  # For health_check
+        MagicMock(status_code=200, json=lambda: {"status": "success", "message": "registered"}, raise_for_status=MagicMock()),  # For register_device
+        MagicMock(status_code=200, json=lambda: {"device_id": TEST_DEVICE_ID}, raise_for_status=MagicMock()),  # For get_device_info
+        MagicMock(status_code=200, json=lambda: {"status": "success"}, raise_for_status=MagicMock()), # For send_telemetry
     ]
     assert client.test_connection() is True
 
@@ -470,14 +523,14 @@ def test_secure_client_test_connection_get_device_info_failure(
     client = secure_client_keys_exist
     # Mock health_check and register_device to succeed
     mock_httpx_client.request.side_effect = [
-        MagicMock(status_code=200, json=lambda: {"status": "healthy"}), # for health_check
-        MagicMock(status_code=200, json=lambda: {"status": "success", "message": "registered"}), # for register_device
+        MagicMock(status_code=200, json=lambda: {"status": "healthy"}, raise_for_status=MagicMock()), # for health_check
+        MagicMock(status_code=200, json=lambda: {"status": "success", "message": "registered"}, raise_for_status=MagicMock()), # for register_device
         httpx.RequestError("Device info failed", request=httpx.Request("GET", TEST_BASE_URL)), # for get_device_info
     ]
 
     with patch('equus_express.edge_device_controller.logger.error') as mock_error:
         assert client.test_connection() is False  # Should return False
-        assert "Failed to get device info: Device info failed" in mock_error.call_args[0][0]
+        assert "Connection test for device test_client_device failed: Device info failed" in mock_error.call_args[0][0]
 
 
 # --- DeviceAgent Tests ---
@@ -492,8 +545,8 @@ async def test_device_agent_start_success(mock_device_agent_dependencies):
     await agent.start()
 
     mock_client.register_device.assert_called_once()
-    mock_nats_client.connect.assert_called_once()
-    mock_client.update_status.assert_called_with("online", {"message": "Device agent started."})
+    mock_nats_client.connect.assert_awaited_once()
+    mock_client.update_status.assert_awaited_with("online", {"message": "Device agent started."})
     mock_nats_client.subscribe.assert_called_once_with(f"commands.{TEST_DEVICE_ID}", agent._handle_command_message)
 
 @pytest.mark.asyncio
@@ -508,8 +561,8 @@ async def test_device_agent_start_failure(mock_device_agent_dependencies):
         await agent.start()
 
     mock_client.register_device.assert_called_once()
-    mock_client.update_status.assert_called_with("error", {"message": "Failed to start: Registration failed"})
-    mock_nats_client.disconnect.assert_called_once() # Should attempt to stop gracefully
+    mock_client.update_status.assert_awaited_with("error", {"message": "Failed to start: Registration failed"})
+    mock_nats_client.disconnect.assert_awaited_once() # Should attempt to stop gracefully
 
 @pytest.mark.asyncio
 async def test_device_agent_start_update_status_failure(mock_device_agent_dependencies):
@@ -517,16 +570,16 @@ async def test_device_agent_start_update_status_failure(mock_device_agent_depend
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
     mock_nats_client = mock_device_agent_dependencies["mock_nats_client_instance"]
     mock_client.register_device.return_value = {"status": "success"}
-    mock_nats_client.connect.return_value = None
+    mock_nats_client.connect.return_value = AsyncMock()
     mock_client.update_status.side_effect = Exception("Status update failed") # Changed to generic Exception
 
     agent = DeviceAgent(mock_client, mock_nats_client)
     with pytest.raises(Exception, match="Status update failed"): # Expect the exception to propagate
         await agent.start()
 
-    mock_client.update_status.assert_called_once()
-    mock_client.update_status.assert_called_with("error", {"message": "Failed to start: Status update failed"})
-    mock_nats_client.disconnect.assert_called_once() # Should attempt to stop gracefully
+    mock_client.update_status.assert_awaited_once()
+    mock_client.update_status.assert_awaited_with("error", {"message": "Failed to start: Status update failed"})
+    mock_nats_client.disconnect.assert_awaited_once() # Should attempt to stop gracefully
 
 
 @pytest.mark.asyncio
@@ -537,15 +590,17 @@ async def test_device_agent_stop(mock_device_agent_dependencies):
 
     agent = DeviceAgent(mock_client, mock_nats_client)
     # Simulate tasks being created
-    agent._telemetry_task = MagicMock(spec=asyncio.Task)
-    agent._command_listener_task = MagicMock(spec=asyncio.Task)
+    agent._telemetry_task = AsyncMock(spec=asyncio.Task)
+    agent._command_listener_task = AsyncMock(spec=asyncio.Task)
 
     await agent.stop()
 
     agent._telemetry_task.cancel.assert_called_once()
     agent._command_listener_task.cancel.assert_called_once()
-    mock_nats_client.disconnect.assert_called_once()
-    mock_client.update_status.assert_called_with("offline", {"message": "Device agent stopped."})
+    agent._telemetry_task.assert_awaited_once()
+    agent._command_listener_task.assert_awaited_once()
+    mock_nats_client.disconnect.assert_awaited_once()
+    mock_client.update_status.assert_awaited_with("offline", {"message": "Device agent stopped."})
 
 @pytest.mark.asyncio
 async def test_device_agent_run_telemetry_loop(mock_device_agent_dependencies):
@@ -555,15 +610,16 @@ async def test_device_agent_run_telemetry_loop(mock_device_agent_dependencies):
     agent = DeviceAgent(mock_client, mock_device_agent_dependencies["mock_nats_client_instance"])
 
     # Configure asyncio.sleep to raise CancelledError after 3 calls
-    mock_asyncio_sleep.side_effect = [None, None, asyncio.CancelledError]
+    mock_asyncio_sleep.side_effect = [AsyncMock(), AsyncMock(), asyncio.CancelledError]
 
-    with patch("equus_express.edge_device_controller.DeviceAgent._collect_telemetry",
-               return_value={"mock_data": 123}):
-        await agent.run_telemetry_loop(interval=1)
+    with pytest.raises(asyncio.CancelledError): # Expect CancelledError to propagate
+        with patch("equus_express.edge_device_controller.DeviceAgent._collect_telemetry",
+                   return_value={"mock_data": 123}):
+            await agent.run_telemetry_loop(interval=1)
 
-    assert mock_client.send_telemetry.call_count == 3
-    assert mock_asyncio_sleep.call_count == 3 # Called after each telemetry send
-    mock_asyncio_sleep.assert_called_with(1)
+    assert mock_client.send_telemetry.call_count == 2 # Called twice before CancelledError
+    assert mock_asyncio_sleep.call_count == 3 # Called after each telemetry send and once more to stop
+    mock_asyncio_sleep.assert_called_with(1) # Last call should be with interval
 
 @pytest.mark.asyncio
 async def test_device_agent_run_telemetry_loop_communication_error(mock_device_agent_dependencies, caplog):
@@ -575,18 +631,20 @@ async def test_device_agent_run_telemetry_loop_communication_error(mock_device_a
     # Simulate an error on the first send, then stop on the second
     mock_client.send_telemetry.side_effect = [
         httpx.RequestError("Simulated connection error", request=httpx.Request("POST", TEST_BASE_URL)),
-        asyncio.CancelledError # Stop the loop after the second iteration
+        AsyncMock(), # For the second successful send
+        asyncio.CancelledError # Stop the loop after the third iteration
     ]
-    mock_asyncio_sleep.side_effect = [None, None] # Allow two sleeps
+    mock_asyncio_sleep.side_effect = [AsyncMock(), AsyncMock(), AsyncMock(), asyncio.CancelledError] # Allow sleeps
 
     with caplog.at_level(logging.ERROR):
         with patch("equus_express.edge_device_controller.DeviceAgent._collect_telemetry", return_value={"mock_data": 123}):
-            await agent.run_telemetry_loop(interval=1)
+            with pytest.raises(asyncio.CancelledError):
+                await agent.run_telemetry_loop(interval=1)
 
     assert "Error collecting or sending telemetry: Simulated connection error" in caplog.text
-    mock_client.update_status.assert_called_with("warning", {"message": "Telemetry error: Simulated connection error"})
-    assert mock_client.send_telemetry.call_count == 2
-    assert mock_asyncio_sleep.call_count == 2
+    mock_client.update_status.assert_awaited_with("warning", {"message": "Telemetry error: Simulated connection error"})
+    assert mock_client.send_telemetry.call_count == 2 # First call raises error, second is successful
+    assert mock_asyncio_sleep.call_count == 4 # 0.1s sleep, 1s sleep, 0.1s sleep, 1s sleep, 0.1s sleep, 1s sleep (cancelled)
 
 @pytest.mark.asyncio
 async def test_device_agent_run_telemetry_loop_unexpected_error(mock_device_agent_dependencies, caplog):
@@ -598,18 +656,20 @@ async def test_device_agent_run_telemetry_loop_unexpected_error(mock_device_agen
     # Simulate an unexpected error on the first send, then stop on the second
     mock_client.send_telemetry.side_effect = [
         ValueError("Unexpected data format"),
-        asyncio.CancelledError # Stop the loop after the second iteration
+        AsyncMock(), # For the second successful send
+        asyncio.CancelledError # Stop the loop after the third iteration
     ]
-    mock_asyncio_sleep.side_effect = [None, None] # Allow two sleeps
+    mock_asyncio_sleep.side_effect = [AsyncMock(), AsyncMock(), AsyncMock(), asyncio.CancelledError] # Allow sleeps
 
     with caplog.at_level(logging.ERROR):
         with patch("equus_express.edge_device_controller.DeviceAgent._collect_telemetry", return_value={"mock_data": 123}):
-            await agent.run_telemetry_loop(interval=1)
+            with pytest.raises(asyncio.CancelledError):
+                await agent.run_telemetry_loop(interval=1)
 
     assert "Error collecting or sending telemetry: Unexpected data format" in caplog.text
-    mock_client.update_status.assert_called_with("warning", {"message": "Telemetry error: Unexpected data format"})
+    mock_client.update_status.assert_awaited_with("warning", {"message": "Telemetry error: Unexpected data format"})
     assert mock_client.send_telemetry.call_count == 2
-    assert mock_asyncio_sleep.call_count == 2
+    assert mock_asyncio_sleep.call_count == 4
 
 @pytest.mark.asyncio
 async def test_device_agent_handle_command_message_success(mock_device_agent_dependencies):
@@ -625,7 +685,7 @@ async def test_device_agent_handle_command_message_success(mock_device_agent_dep
     with patch("equus_express.edge_device_controller.DeviceAgent._collect_telemetry", return_value={"mock_telemetry": "data"}):
         await agent._handle_command_message(mock_msg)
 
-    mock_nats_client.publish.assert_called_once()
+    mock_nats_client.publish.assert_awaited_once()
     published_data = json.loads(mock_nats_client.publish.call_args[0][1].decode())
     assert published_data["status"] == "success"
     assert published_data["result"] == {"mock_telemetry": "data"}
@@ -645,7 +705,7 @@ async def test_device_agent_handle_command_message_invalid_json(mock_device_agen
         await agent._handle_command_message(mock_msg)
 
     assert "Invalid JSON command received: invalid json" in caplog.text
-    mock_nats_client.publish.assert_called_once()
+    mock_nats_client.publish.assert_awaited_once()
     published_data = json.loads(mock_nats_client.publish.call_args[0][1].decode())
     assert published_data["status"] == "error"
     assert "Invalid JSON command format." in published_data["message"]
@@ -665,7 +725,7 @@ async def test_device_agent_handle_command_message_missing_type(mock_device_agen
         await agent._handle_command_message(mock_msg)
 
     assert "Command validation error: Command message missing 'type' field." in caplog.text
-    mock_nats_client.publish.assert_called_once()
+    mock_nats_client.publish.assert_awaited_once()
     published_data = json.loads(mock_nats_client.publish.call_args[0][1].decode())
     assert published_data["status"] == "error"
     assert "Command message missing 'type' field." in published_data["message"]
@@ -685,7 +745,7 @@ async def test_device_agent_handle_command_message_unknown_command(mock_device_a
         await agent._handle_command_message(mock_msg)
 
     assert "Command validation error: Unknown command type: unknown_command" in caplog.text
-    mock_nats_client.publish.assert_called_once()
+    mock_nats_client.publish.assert_awaited_once()
     published_data = json.loads(mock_nats_client.publish.call_args[0][1].decode())
     assert published_data["status"] == "error"
     assert "Unknown command type: unknown_command" in published_data["message"]
@@ -706,7 +766,7 @@ async def test_device_agent_handle_command_message_exception_during_execution(mo
             await agent._handle_command_message(mock_msg)
 
     assert "Unexpected error during command execution: Simulated execution error" in caplog.text
-    mock_nats_client.publish.assert_called_once()
+    mock_nats_client.publish.assert_awaited_once()
     published_data = json.loads(mock_nats_client.publish.call_args[0][1].decode())
     assert published_data["status"] == "error"
     assert "Error executing command: Simulated execution error" in published_data["message"]
@@ -793,7 +853,7 @@ def test_device_agent_smbus_not_installed(mock_device_agent_dependencies, caplog
         with caplog.at_level(logging.WARNING):
             agent = DeviceAgent(mock_client, mock_nats_client, smbus_address=0x42, smbus_bus_num=1)
             assert agent.smbus_bus is None
-            assert "smbus2 library not found. SMBus communication will be disabled." in caplog.text
+            assert "smbus2 not installed, SMBus communication will be disabled." in caplog.text
 
 def test_device_agent_smbus_write_block_data_no_bus(mock_device_agent_dependencies):
     """Test _smbus_write_block_data raises error if bus not available."""
@@ -1056,7 +1116,7 @@ def test_secure_client_get_ip_address_fallback_to_localhost():
     """Test _get_ip_address falls back to 127.0.0.1 if all attempts fail."""
     client = SecureAPIClient(base_url=TEST_BASE_URL, device_id=TEST_DEVICE_ID, key_dir="/tmp/keys")
     with patch("equus_express.edge_device_controller.socket.socket", side_effect=Exception("No network")):
-        with patch("equus_express.edge_device_controller.fcntl.ioctl", side_effect=OSError("No interface")):
+        with patch("equus_express.edge_device_controller.socket.gethostbyname", side_effect=socket.gaierror("No host")):
             assert client._get_ip_address() == "127.0.0.1"
 
 # --- Main function tests ---
@@ -1066,8 +1126,8 @@ async def test_main_success(mock_device_agent_dependencies, caplog):
     mock_api_client = mock_device_agent_dependencies["mock_client_instance"]
     mock_nats_client = mock_device_agent_dependencies["mock_nats_client_instance"]
     mock_agent_instance = MagicMock()
-    mock_agent_instance.start.return_value = None
-    mock_agent_instance.stop.return_value = None
+    mock_agent_instance.start.return_value = AsyncMock()
+    mock_agent_instance.stop.return_value = AsyncMock()
 
     with patch("equus_express.edge_device_controller.SecureAPIClient", return_value=mock_api_client), \
          patch("equus_express.edge_device_controller.NATSClient", return_value=mock_nats_client), \
@@ -1082,10 +1142,10 @@ async def test_main_success(mock_device_agent_dependencies, caplog):
         device_id=mock_api_client.device_id, # Check device_id passed
         key_dir=os.getenv("KEY_DIR", os.path.expanduser("~/.equus_express/keys"))
     )
-    mock_agent_instance.start.assert_called_once()
-    mock_agent_instance.stop.assert_called_once()
+    mock_agent_instance.start.assert_awaited_once()
+    mock_agent_instance.stop.assert_awaited_once()
     assert "Agent main loop cancelled." in caplog.text
-    assert "Agent stopped gracefully." in caplog.text
+    assert "Device Agent stopped." in caplog.text # Changed from "Agent stopped gracefully."
 
 @pytest.mark.asyncio
 async def test_main_agent_start_failure(mock_device_agent_dependencies, caplog):
@@ -1094,7 +1154,7 @@ async def test_main_agent_start_failure(mock_device_agent_dependencies, caplog):
     mock_nats_client = mock_device_agent_dependencies["mock_nats_client_instance"]
     mock_agent_instance = MagicMock()
     mock_agent_instance.start.side_effect = Exception("Agent start failed")
-    mock_agent_instance.stop.return_value = None # Ensure stop can be called
+    mock_agent_instance.stop.return_value = AsyncMock() # Ensure stop can be called
 
     with patch("equus_express.edge_device_controller.SecureAPIClient", return_value=mock_api_client), \
          patch("equus_express.edge_device_controller.NATSClient", return_value=mock_nats_client), \
@@ -1103,10 +1163,10 @@ async def test_main_agent_start_failure(mock_device_agent_dependencies, caplog):
             from equus_express.edge_device_controller import main
             await main()
 
-    mock_agent_instance.start.assert_called_once()
-    mock_agent_instance.stop.assert_called_once() # Agent was created, so stop is called
+    mock_agent_instance.start.assert_awaited_once()
+    mock_agent_instance.stop.assert_awaited_once() # Agent was created, so stop is called
     assert "Agent encountered a critical error: Agent start failed" in caplog.text
-    assert "Agent stopped gracefully." in caplog.text # Stop message should still appear
+    assert "Device Agent stopped." in caplog.text # Stop message should still appear
 
 @pytest.mark.asyncio
 async def test_main_client_init_critical_error(mock_crypto, caplog):
@@ -1123,7 +1183,7 @@ async def test_main_client_init_critical_error(mock_crypto, caplog):
     MockNATSClient.assert_not_called() # NATSClient should not be instantiated
     MockDeviceAgent.assert_not_called() # DeviceAgent should not be instantiated
     assert "Agent encountered a critical error: Failed to initialize client keys: Critical init error" in caplog.text
-    assert "Agent stopped gracefully." not in caplog.text # Agent was never started, so no graceful stop message
+    assert "Device Agent stopped." not in caplog.text # Agent was never started, so no graceful stop message
 
 @pytest.mark.asyncio
 async def test_main_unexpected_error(caplog):
@@ -1139,4 +1199,4 @@ async def test_main_unexpected_error(caplog):
     MockNATSClient.assert_not_called()
     MockDeviceAgent.assert_not_called()
     assert "Agent encountered a critical error: Unexpected client error" in caplog.text
-    assert "Agent stopped gracefully." not in caplog.text
+    assert "Device Agent stopped." not in caplog.text

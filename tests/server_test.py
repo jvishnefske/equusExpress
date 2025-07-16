@@ -14,7 +14,7 @@ import pathlib
 
 # Define a test device ID and public key
 TEST_DEVICE_ID = "test_device_001"
-TEST_PUBLIC_KEY = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD3g+3Y6J/K..."
+TEST_PUBLIC_KEY = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAQD3g+3Y6J/K..." # Shortened for example
 
 # Constants for API server identity tests
 MOCK_API_SERVER_ID = "00000000-0000-4000-8000-000000000001"
@@ -101,7 +101,7 @@ def mock_api_identity_generation(tmp_path):
         patch("builtins.open", m_open),
         patch("equus_express.system_api.rsa.generate_private_key", return_value=mock_private_key),
         # Patch pathlib.Path.exists to control behavior for the specific files
-        patch.object(pathlib.Path, 'exists', side_effect=lambda p: False if p in [mock_server_id_path, mock_private_key_path] else True),
+        patch.object(pathlib.Path, 'exists', side_effect=[False, False]), # First call for server_id_path.exists(), second for private_key_path.exists()
         patch.object(pathlib.Path, 'mkdir'), # Mock mkdir to prevent actual directory creation
     ):
         # Configure mock_serialization for PEM encoding/decryption
@@ -159,7 +159,7 @@ def mock_api_identity_loading(tmp_path):
         patch("equus_express.system_api.serialization") as mock_serialization,
         patch("builtins.open", m_open),
         # Patch pathlib.Path.exists to control behavior for the specific files
-        patch.object(pathlib.Path, 'exists', side_effect=lambda p: True if p in [mock_server_id_path, mock_private_key_path] else False),
+        patch.object(pathlib.Path, 'exists', side_effect=[True, True]), # First call for server_id_path.exists(), second for private_key_path.exists()
         patch.object(pathlib.Path, 'mkdir'), # Mock mkdir to prevent actual directory creation
     ):
         # Configure mock_serialization for PEM encoding/decryption
@@ -784,4 +784,3 @@ def test_lifespan_static_file_setup_error():
             with TestClient(temp_app) as client:
                 # No actual requests needed, just the startup part is tested
                 pass
-
