@@ -55,6 +55,7 @@ venv.bak/
 
 .aider*
 secure_devices.db
+test_secure_devices.db
 letsencrypt
 *.sw[po]
 

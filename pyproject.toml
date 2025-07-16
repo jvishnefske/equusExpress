@@ -17,6 +17,7 @@ dependencies = [
     "jinja2",
     "httpx",
     "psutil", # Add psutil if it's a runtime dependency for telemetry
+    "jsonschema>=4.24.0",
 ]
 
 [tool.setuptools.packages.find]
