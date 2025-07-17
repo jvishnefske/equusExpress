@@ -67,6 +67,7 @@ def setup_teardown_db():
         del os.environ["SQLITE_DB_PATH"]
 
 
+@pytest.mark.verifies_requirement("6.1.1")
 @pytest.fixture
 def mock_api_identity_generation(tmp_path):
     """Mocks UUID and crypto functions for API server identity generation."""
@@ -119,6 +120,7 @@ def mock_api_identity_generation(tmp_path):
         }
 
 
+@pytest.mark.verifies_requirement("6.1.1")
 @pytest.fixture
 def mock_api_identity_loading(tmp_path):
     """Mocks UUID and crypto functions for API server identity loading."""
@@ -171,6 +173,7 @@ def mock_api_identity_loading(tmp_path):
         }
 
 
+@pytest.mark.verifies_requirement("6.1.1")
 def test_api_server_identity_generated_on_startup(setup_teardown_db, mock_api_identity_generation):
     """Test that API server identity (GUID and keys) is generated on startup if not present."""
     mock_data = mock_api_identity_generation
@@ -189,6 +192,7 @@ def test_api_server_identity_generated_on_startup(setup_teardown_db, mock_api_id
     assert mock_data["mock_app"].state.api_public_key_pem == MOCK_API_PUBLIC_KEY_PEM
 
 
+@pytest.mark.verifies_requirement("6.1.1")
 def test_api_server_identity_loaded_on_startup(setup_teardown_db, mock_api_identity_loading):
     """Test that API server identity (GUID and keys) is loaded on startup if present."""
     mock_data = mock_api_identity_loading
@@ -221,14 +225,17 @@ def get_db_connection():
     return sqlite3.connect(db_path)
 
 
+@pytest.mark.verifies_requirement("F-API-001")
 def test_health_check():
     """Test the /health endpoint."""
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
+    assert "api_server_id" in response.json() # Include assertion for api_server_id
     assert "timestamp" in response.json()
 
 
+@pytest.mark.verifies_requirement("F-API-002")
 def test_register_device():
     """Test device registration."""
     response = client.post(
@@ -254,6 +261,7 @@ def test_register_device():
     assert device[1] == TEST_PUBLIC_KEY
 
 
+@pytest.mark.verifies_requirement("F-API-003")
 def test_send_telemetry():
     """Test sending telemetry data."""
     # First, register the device
@@ -292,6 +300,7 @@ def test_send_telemetry():
     assert "temp" in telemetry_record[1]  # Check if data is stored as JSON string
 
 
+@pytest.mark.verifies_requirement("6.1")
 def test_get_authenticated_device_id_missing_header():
     """Test get_authenticated_device_id when X-Device-Id header is missing."""
     # Attempt to access an authenticated endpoint without the header
@@ -300,6 +309,7 @@ def test_get_authenticated_device_id_missing_header():
     assert "Authentication required" in response.json()["detail"]
 
 
+@pytest.mark.verifies_requirement("F-API-002")
 def test_register_device_missing_fields():
     """Test device registration with missing device_id or public_key."""
     response = client.post("/api/register", json={"public_key": TEST_PUBLIC_KEY})
@@ -311,6 +321,7 @@ def test_register_device_missing_fields():
     assert "public_key" in response.json()["detail"][0]["loc"]
 
 
+@pytest.mark.verifies_requirement("F-API-003")
 def test_receive_telemetry_device_id_mismatch():
     """Test receiving telemetry with device ID mismatch between payload and header."""
     # First, register the device
@@ -333,6 +344,7 @@ def test_receive_telemetry_device_id_mismatch():
     assert "Device ID in payload does not match authenticated device." in response.json()["detail"]
 
 
+@pytest.mark.verifies_requirement("F-API-004")
 def test_update_device_status_device_id_mismatch():
     """Test updating device status with device ID mismatch between payload and header."""
     # First, register a device
@@ -355,6 +367,7 @@ def test_update_device_status_device_id_mismatch():
     assert "Device ID in payload does not match authenticated device." in response.json()["detail"]
 
 
+@pytest.mark.verifies_requirement("F-API-006")
 def test_get_device_config_device_id_mismatch():
     """Test getting device config with device ID mismatch between path and header."""
     # First, register a device
@@ -372,6 +385,7 @@ def test_get_device_config_device_id_mismatch():
     assert "Access denied: Device ID mismatch." in response.json()["detail"]
 
 
+@pytest.mark.verifies_requirement("F-API-007")
 def test_list_devices_empty():
     """Test listing devices when no devices are registered."""
     response = client.get("/api/admin/devices")
@@ -379,6 +393,7 @@ def test_list_devices_empty():
     assert response.json()["devices"] == []
 
 
+@pytest.mark.verifies_requirement("F-API-008")
 def test_get_device_telemetry_no_telemetry():
     """Test getting telemetry for a device that exists but has no telemetry."""
     # Register a device first
@@ -393,6 +408,7 @@ def test_get_device_telemetry_no_telemetry():
     assert response.json()["telemetry"] == []
 
 
+@pytest.mark.verifies_requirement("F-API-008")
 def test_get_device_telemetry_device_not_found():
     """Test getting telemetry for a device that does not exist."""
     non_existent_device_id = "non_existent_device"
@@ -402,6 +418,7 @@ def test_get_device_telemetry_device_not_found():
     assert response.json()["telemetry"] == []
 
 
+@pytest.mark.verifies_requirement("F-API-004")
 def test_update_device_status():
     """Test updating device status."""
     # First, register the device
@@ -437,6 +454,7 @@ def test_update_device_status():
     assert device_status[0] == "active"
 
 
+@pytest.mark.verifies_requirement("F-API-005")
 def test_get_device_info():
     """Test getting device information."""
     # First, register the device
@@ -456,6 +474,7 @@ def test_get_device_info():
     assert "status" in response.json()
 
 
+@pytest.mark.verifies_requirement("F-API-005")
 def test_get_device_info_not_found():
     """Test getting device info for a device that does not exist."""
     response = client.get(
@@ -466,6 +485,7 @@ def test_get_device_info_not_found():
     assert response.json() == {"error": "Device not found"}
 
 
+@pytest.mark.verifies_requirement("F-API-006")
 def test_get_device_config():
     """Test getting device configuration."""
     # First, register the device
@@ -486,6 +506,7 @@ def test_get_device_config():
     )  # Default config
 
 
+@pytest.mark.verifies_requirement("F-API-007")
 def test_list_devices():
     """Test listing all devices (admin endpoint)."""
     # Register a device first
@@ -502,6 +523,7 @@ def test_list_devices():
     )
 
 
+@pytest.mark.verifies_requirement("F-API-008")
 def test_get_device_telemetry():
     """Test getting telemetry for a specific device (admin endpoint)."""
     # Register device and send telemetry
@@ -529,6 +551,7 @@ def test_get_device_telemetry():
     assert response.json()["telemetry"][0]["data"]["temp"] == pytest.approx(25.5)
 
 
+@pytest.mark.verifies_requirement("F-DB-001") # New, explicit DB requirement for errors
 def test_init_secure_db_error(mock_db_error):
     """Test init_secure_db handles database errors."""
     # Ensure a clean slate before attempting to init with error
@@ -541,6 +564,7 @@ def test_init_secure_db_error(mock_db_error):
     mock_db_error.assert_called_once() # Verify connect was attempted
 
 
+@pytest.mark.verifies_requirement("F-DB-001")
 def test_register_device_db_error(mock_db_error):
     """Test device registration endpoint handles database errors."""
     response = client.post(
@@ -551,6 +575,7 @@ def test_register_device_db_error(mock_db_error):
     assert "Database error during registration" in response.json()["detail"]
 
 
+@pytest.mark.verifies_requirement("F-API-002")
 def test_register_device_unexpected_error():
     """Test device registration endpoint handles unexpected errors."""
     # Mock register_or_update_device to raise a non-sqlite3 error
@@ -563,6 +588,7 @@ def test_register_device_unexpected_error():
     assert "Failed to register device: Simulated unexpected error" in response.json()["detail"]
 
 
+@pytest.mark.verifies_requirement("F-DB-001")
 def test_get_device_info_db_error(mock_db_error):
     """Test get device info endpoint handles database errors."""
     response = client.get(
@@ -572,6 +598,7 @@ def test_get_device_info_db_error(mock_db_error):
     assert "Failed to retrieve device info" in response.json()["detail"]
 
 
+@pytest.mark.verifies_requirement("F-DB-001")
 def test_receive_telemetry_db_error(mock_db_error):
     """Test receive telemetry endpoint handles database errors."""
     telemetry_data = {
@@ -588,6 +615,7 @@ def test_receive_telemetry_db_error(mock_db_error):
     assert "Failed to store telemetry" in response.json()["detail"]
 
 
+@pytest.mark.verifies_requirement("F-API-003")
 def test_receive_telemetry_unexpected_error():
     """Test receive telemetry endpoint handles unexpected errors."""
     # Mock sqlite3.connect within the endpoint to raise a non-system_api error
@@ -606,6 +634,7 @@ def test_receive_telemetry_unexpected_error():
     assert "Failed to store telemetry" in response.json()["detail"]
 
 
+@pytest.mark.verifies_requirement("F-DB-001")
 def test_update_device_status_db_error(mock_db_error):
     """Test update device status endpoint handles database errors."""
     status_data = {
@@ -623,6 +652,7 @@ def test_update_device_status_db_error(mock_db_error):
     assert "Failed to update status" in response.json()["detail"]
 
 
+@pytest.mark.verifies_requirement("F-API-004")
 def test_update_device_status_unexpected_error():
     """Test update device status endpoint handles unexpected errors."""
     with patch('equus_express.system_api.sqlite3.connect', side_effect=ValueError("Unexpected status DB error")):
@@ -641,6 +671,7 @@ def test_update_device_status_unexpected_error():
     assert "Failed to update status" in response.json()["detail"]
 
 
+@pytest.mark.verifies_requirement("F-DB-001")
 def test_get_device_config_db_error(mock_db_error):
     """Test get device config endpoint handles database errors."""
     response = client.get(
@@ -651,6 +682,7 @@ def test_get_device_config_db_error(mock_db_error):
     assert "Failed to retrieve configuration" in response.json()["detail"]
 
 
+@pytest.mark.verifies_requirement("F-API-006")
 def test_get_device_config_unexpected_error():
     """Test get device config endpoint handles unexpected errors."""
     with patch('equus_express.system_api.sqlite3.connect', side_effect=ValueError("Unexpected config DB error")):
@@ -662,6 +694,7 @@ def test_get_device_config_unexpected_error():
     assert "Failed to retrieve configuration" in response.json()["detail"]
 
 
+@pytest.mark.verifies_requirement("F-DB-001")
 def test_list_devices_db_error(mock_db_error):
     """Test list devices endpoint handles database errors."""
     response = client.get("/api/admin/devices")
@@ -669,6 +702,7 @@ def test_list_devices_db_error(mock_db_error):
     assert "Failed to list devices" in response.json()["detail"]
 
 
+@pytest.mark.verifies_requirement("F-API-007")
 def test_list_devices_unexpected_error():
     """Test list devices endpoint handles unexpected errors."""
     with patch('equus_express.system_api.sqlite3.connect', side_effect=ValueError("Unexpected list devices DB error")):
@@ -677,6 +711,7 @@ def test_list_devices_unexpected_error():
     assert "Failed to list devices" in response.json()["detail"]
 
 
+@pytest.mark.verifies_requirement("F-DB-001")
 def test_get_device_telemetry_db_error(mock_db_error):
     """Test get device telemetry endpoint handles database errors."""
     response = client.get(f"/api/admin/telemetry/{TEST_DEVICE_ID}")
@@ -684,6 +719,7 @@ def test_get_device_telemetry_db_error(mock_db_error):
     assert "Failed to retrieve telemetry" in response.json()["detail"]
 
 
+@pytest.mark.verifies_requirement("F-API-008")
 def test_get_device_telemetry_unexpected_error():
     """Test get device telemetry endpoint handles unexpected errors."""
     with patch('equus_express.system_api.sqlite3.connect', side_effect=ValueError("Unexpected telemetry DB error")):
@@ -691,6 +727,7 @@ def test_get_device_telemetry_unexpected_error():
     assert response.status_code == 500
     assert "Failed to retrieve telemetry" in response.json()["detail"]
 
+@pytest.mark.verifies_requirement("6.1.2")
 
 def test_api_provision_request_success():
     """Test the /api/provision/request endpoint successfully submits a request."""
@@ -722,6 +759,7 @@ def test_api_provision_request_success():
     assert record[5] is not None # ip_address should be captured
 
 
+@pytest.mark.verifies_requirement("6.1.2")
 def test_api_provision_request_missing_fields():
     """Test /api/provision/request with missing required fields."""
     response = client.post("/api/provision/request", json={"public_key": "abc"})
@@ -733,6 +771,7 @@ def test_api_provision_request_missing_fields():
     assert "public_key" in response.json()["detail"][0]["loc"] # No change
 
 
+@pytest.mark.verifies_requirement("F-DB-001")
 def test_api_provision_request_db_error(mock_db_error):
     """Test /api/provision/request handles database errors."""
     request_data = {
@@ -744,6 +783,7 @@ def test_api_provision_request_db_error(mock_db_error):
     assert "Failed to submit provisioning request" in response.json()["detail"]
 
 
+@pytest.mark.verifies_requirement("F-Main-002") # New requirement for lifespan
 def test_favicon_not_found():
     """Test favicon endpoint when file is not found."""
     with patch("equus_express.system_api.pkg_resources.files") as mock_files:
@@ -758,6 +798,7 @@ def test_favicon_not_found():
             assert response.status_code == 404
             assert "Favicon not found" in response.json()["detail"]
 
+@pytest.mark.verifies_requirement("F-Main-002")
 
 def test_lifespan_static_file_setup_error():
     """Test lifespan context manager handles errors during static file setup."""

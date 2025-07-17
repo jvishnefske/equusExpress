@@ -206,6 +206,7 @@ def mock_device_agent_dependencies():
 # --- SecureAPIClient Tests ---
 
 
+@pytest.mark.verifies_requirement("6.1.1")
 def test_secure_client_initialization_generates_keys(
     secure_client_no_keys_exist, mock_crypto, mock_httpx_client
 ):
@@ -220,6 +221,7 @@ def test_secure_client_initialization_generates_keys(
     mock_crypto["mock_serialization"].load_pem_private_key.assert_not_called()
 
 
+@pytest.mark.verifies_requirement("6.1.1")
 def test_secure_client_initialization_loads_keys(
     secure_client_keys_exist, mock_crypto, mock_httpx_client
 ):
@@ -235,6 +237,7 @@ def test_secure_client_initialization_loads_keys(
     mock_crypto["mock_serialization"].load_ssh_public_key.assert_called_once()
 
 
+@pytest.mark.verifies_requirement("6.1.1")
 def test_secure_client_init_os_error(tmp_key_dir):
     """Test that SecureAPIClient initialization handles OSError during key operations."""
     with patch("equus_express.edge_device_controller.os.makedirs", side_effect=OSError("Disk full")): # Removed mock_makedirs alias as it's not asserted directly
@@ -247,6 +250,7 @@ def test_secure_client_init_os_error(tmp_key_dir):
         # Assertions on mock_makedirs should be done in a separate test if needed. Here, we just check exception.
 
 
+@pytest.mark.verifies_requirement("F-API-002")
 def test_secure_client_register_device_no_public_key(mock_httpx_client, tmp_key_dir):
     """Test register_device raises RuntimeError if public_key is not available."""
     with patch("equus_express.edge_device_controller.SecureAPIClient._load_or_generate_keys"):
@@ -258,6 +262,7 @@ def test_secure_client_register_device_no_public_key(mock_httpx_client, tmp_key_
     mock_httpx_client.request.assert_not_called()
 
 
+@pytest.mark.verifies_requirement("6.2")
 def test_secure_client_register_device_network_error(mock_httpx_client, secure_client_keys_exist):
     """Test register_device handles network/server errors."""
     client = secure_client_keys_exist
@@ -271,6 +276,7 @@ def test_secure_client_register_device_network_error(mock_httpx_client, secure_c
     mock_httpx_client.request.assert_called_once()
 
 
+@pytest.mark.verifies_requirement("F-API-000") # General API communication
 def test_secure_client_make_request_success(
     mock_httpx_client, secure_client_keys_exist, mock_crypto
 ):
@@ -290,6 +296,7 @@ def test_secure_client_make_request_success(
     assert result.json() == response_data
 
 
+@pytest.mark.verifies_requirement("F-API-000") # General API communication
 def test_secure_client_make_request_non_json_response(
     mock_httpx_client, secure_client_keys_exist
 ):
@@ -304,6 +311,7 @@ def test_secure_client_make_request_non_json_response(
         client.get("/plaintext").json()
 
 
+@pytest.mark.verifies_requirement("6.1")
 def test_secure_client_make_request_401_error(
     mock_httpx_client, secure_client_keys_exist
 ):
@@ -319,6 +327,7 @@ def test_secure_client_make_request_401_error(
         client.get("/protected")
 
 
+@pytest.mark.verifies_requirement("6.1")
 def test_secure_client_make_request_403_error(
     mock_httpx_client, secure_client_keys_exist
 ):
@@ -334,6 +343,7 @@ def test_secure_client_make_request_403_error(
         client.get("/forbidden")
 
 
+@pytest.mark.verifies_requirement("6.2")
 def test_secure_client_make_request_http_error(
     mock_httpx_client, secure_client_keys_exist
 ):
@@ -349,6 +359,7 @@ def test_secure_client_make_request_http_error(
         client.get("/nonexistent")
 
 
+@pytest.mark.verifies_requirement("F-API-002")
 def test_secure_client_register_device(
     mock_httpx_client, secure_client_keys_exist, mock_crypto
 ):
@@ -374,6 +385,7 @@ def test_secure_client_register_device(
     )
 
 
+@pytest.mark.verifies_requirement("F-API-001")
 def test_secure_client_health_check(
     mock_httpx_client, secure_client_keys_exist, mock_crypto
 ):
@@ -412,6 +424,7 @@ def test_secure_client_send_telemetry(
     )
 
 
+@pytest.mark.verifies_requirement("F-API-006")
 def test_secure_client_get_configuration(
     mock_httpx_client, secure_client_keys_exist, mock_crypto
 ):
@@ -452,6 +465,7 @@ def test_secure_client_update_status(
     )
 
 
+@pytest.mark.verifies_requirement("F-Client-001")
 def test_secure_client_test_connection_success(
     mock_httpx_client,
     secure_client_keys_exist,
@@ -471,6 +485,7 @@ def test_secure_client_test_connection_success(
         assert client.test_connection() is True
 
 
+@pytest.mark.verifies_requirement("F-Client-001")
 def test_secure_client_test_connection_failure(
     mock_httpx_client,
     secure_client_keys_exist,
@@ -486,6 +501,7 @@ def test_secure_client_test_connection_failure(
         assert client.test_connection() is False # Assert that it returns False
 
 
+@pytest.mark.verifies_requirement("F-Client-001")
 def test_secure_client_test_connection_get_device_info_failure(
     mock_httpx_client,
     secure_client_keys_exist,
@@ -510,6 +526,7 @@ def test_secure_client_test_connection_get_device_info_failure(
 # --- DeviceAgent Tests ---
 
 @pytest.mark.asyncio # Mark as async test
+@pytest.mark.verifies_requirement("F-Main-001")
 async def test_device_agent_start_success(mock_device_agent_dependencies):
     """Test DeviceAgent starts successfully."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -527,6 +544,7 @@ async def test_device_agent_start_success(mock_device_agent_dependencies):
     mock_nats_client.subscribe.assert_called_once_with(f"commands.{TEST_DEVICE_ID}", agent._handle_command_message)
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("F-Main-001")
 async def test_device_agent_start_failure(mock_device_agent_dependencies):
     """Test DeviceAgent handles connection failure on start."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -543,6 +561,7 @@ async def test_device_agent_start_failure(mock_device_agent_dependencies):
     mock_nats_client.disconnect.assert_awaited_once() # Should attempt to stop gracefully
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("F-NATS-003")
 async def test_device_agent_start_update_status_failure(mock_device_agent_dependencies):
     """Test DeviceAgent handles failure to send initial 'online' status."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -562,6 +581,7 @@ async def test_device_agent_start_update_status_failure(mock_device_agent_depend
 
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("F-Main-001")
 async def test_device_agent_stop(mock_device_agent_dependencies):
     """Test DeviceAgent stops correctly and sends offline status."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -582,6 +602,7 @@ async def test_device_agent_stop(mock_device_agent_dependencies):
     mock_client.update_status.assert_awaited_with("offline", {"message": "Device agent stopped."})
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("F-NATS-002")
 async def test_device_agent_run_telemetry_loop(mock_device_agent_dependencies):
     """Test telemetry loop sends data at intervals."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -609,6 +630,7 @@ async def test_device_agent_run_telemetry_loop(mock_device_agent_dependencies):
 
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("6.2")
 async def test_device_agent_run_telemetry_loop_communication_error(mock_device_agent_dependencies, caplog):
     """Test telemetry loop handles client communication errors."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -640,6 +662,7 @@ async def test_device_agent_run_telemetry_loop_communication_error(mock_device_a
     assert mock_asyncio_sleep.call_count == 4 # Sleep calls: initial, after first send, before second, after second (cancelled)
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("F-NATS-002")
 async def test_device_agent_run_telemetry_loop_unexpected_error(mock_device_agent_dependencies, caplog):
     """Test telemetry loop handles unexpected general errors."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -670,6 +693,7 @@ async def test_device_agent_run_telemetry_loop_unexpected_error(mock_device_agen
     assert mock_asyncio_sleep.call_count == 4
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("F-NATS-005")
 async def test_device_agent_handle_command_message_success(mock_device_agent_dependencies):
     """Test _handle_command_message processes a valid command."""
     mock_nats_client = mock_device_agent_dependencies["mock_nats_client_instance"]
@@ -689,6 +713,7 @@ async def test_device_agent_handle_command_message_success(mock_device_agent_dep
     assert published_data["data"] == {"mock_telemetry": "data"} # Changed from 'result' to 'data'
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("F-NATS-005")
 async def test_device_agent_handle_command_message_invalid_json(mock_device_agent_dependencies, caplog):
     """Test _handle_command_message handles invalid JSON."""
     mock_nats_client = mock_device_agent_dependencies["mock_nats_client_instance"]
@@ -709,6 +734,7 @@ async def test_device_agent_handle_command_message_invalid_json(mock_device_agen
     assert "Invalid JSON command format." in published_data["message"]
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("F-NATS-005")
 async def test_device_agent_handle_command_message_missing_type(mock_device_agent_dependencies, caplog):
     """Test _handle_command_message handles missing command type."""
     mock_nats_client = mock_device_agent_dependencies["mock_nats_client_instance"]
@@ -729,6 +755,7 @@ async def test_device_agent_handle_command_message_missing_type(mock_device_agen
     assert "'type' field is missing from command." in published_data["message"]
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("F-NATS-005")
 async def test_device_agent_handle_command_message_unknown_command(mock_device_agent_dependencies, caplog):
     """Test _handle_command_message handles unknown command type."""
     mock_nats_client = mock_device_agent_dependencies["mock_nats_client_instance"]
@@ -749,6 +776,7 @@ async def test_device_agent_handle_command_message_unknown_command(mock_device_a
     assert "Unknown command type: unknown_command" in published_data["message"]
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("F-NATS-005")
 async def test_device_agent_handle_command_message_exception_during_execution(mock_device_agent_dependencies, caplog):
     """Test _handle_command_message handles exceptions during command execution."""
     mock_nats_client = mock_device_agent_dependencies["mock_nats_client_instance"]
@@ -770,6 +798,7 @@ async def test_device_agent_handle_command_message_exception_during_execution(mo
     assert "Unexpected error during command execution: Simulated execution error" in published_data["message"]
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("F-NATS-005")
 async def test_device_agent_handle_command_get_telemetry(mock_device_agent_dependencies):
     """Test _handle_command for 'get_telemetry' type."""
     agent = DeviceAgent(mock_device_agent_dependencies["mock_client_instance"], mock_device_agent_dependencies["mock_nats_client_instance"])
@@ -781,6 +810,7 @@ async def test_device_agent_handle_command_get_telemetry(mock_device_agent_depen
         assert result["data"] == expected_telemetry
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("F-NATS-005")
 async def test_device_agent_handle_command_update_config_valid(mock_device_agent_dependencies):
     """Test _handle_command for 'update_config' with valid interval."""
     agent = DeviceAgent(mock_device_agent_dependencies["mock_client_instance"], mock_device_agent_dependencies["mock_nats_client_instance"])
@@ -789,6 +819,7 @@ async def test_device_agent_handle_command_update_config_valid(mock_device_agent
     assert result == {"status": "success", "message": "Telemetry interval updated to 30s (requires restart to apply)."}
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("F-NATS-005")
 async def test_device_agent_handle_command_update_config_invalid(mock_device_agent_dependencies):
     """Test _handle_command for 'update_config' with invalid interval."""
     agent = DeviceAgent(mock_device_agent_dependencies["mock_client_instance"], mock_device_agent_dependencies["mock_nats_client_instance"])
@@ -797,6 +828,7 @@ async def test_device_agent_handle_command_update_config_invalid(mock_device_age
         await agent._handle_command("update_config", params)
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("F-NATS-005")
 async def test_device_agent_handle_command_smbus_write_success(mock_device_agent_dependencies):
     """Test _handle_command for 'smbus_write' success."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -810,6 +842,7 @@ async def test_device_agent_handle_command_smbus_write_success(mock_device_agent
         mock_write.assert_called_once_with(0x42, 0x01, [0x10, 0x20]) # Verify params are passed
         assert result == {"status": "success", "message": "SMBus write to 0x42 command 0x1 successful."}
 
+@pytest.mark.asyncio
 @pytest.mark.asyncio
 async def test_device_agent_handle_command_smbus_read_success(mock_device_agent_dependencies):
     """Test _handle_command for 'smbus_read' success."""
@@ -825,6 +858,7 @@ async def test_device_agent_handle_command_smbus_read_success(mock_device_agent_
         mock_read.assert_called_once_with(0x42, 0x02, 4) # Verify params are passed
         assert result == {"status": "success", "message": "SMBus read from 0x42 command 0x2 successful.", "data": list(expected_read_data)}
 
+@pytest.mark.verifies_requirement("F-Client-003")
 def test_device_agent_smbus_init_success(mock_device_agent_dependencies):
     """Test SMBus initialization success."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -834,6 +868,7 @@ def test_device_agent_smbus_init_success(mock_device_agent_dependencies):
         MockSMBus.assert_called_once_with(1)
         assert agent.smbus is not None # Check if smbus attribute is set
 
+@pytest.mark.verifies_requirement("6.2")
 def test_device_agent_smbus_init_failure(mock_device_agent_dependencies, caplog):
     """Test SMBus initialization failure."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -844,6 +879,7 @@ def test_device_agent_smbus_init_failure(mock_device_agent_dependencies, caplog)
             assert agent.smbus is None # Check if smbus is None
             assert "Failed to initialize SMBus on bus 1: SMBus init error" in caplog.text
 
+@pytest.mark.verifies_requirement("6.2")
 def test_device_agent_smbus_not_installed(mock_device_agent_dependencies, caplog):
     """Test SMBus initialization when smbus2 is not installed."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -854,6 +890,7 @@ def test_device_agent_smbus_not_installed(mock_device_agent_dependencies, caplog
             assert agent.smbus is None # Should be None
             assert "smbus2 library not found. SMBus communication will be unavailable." in caplog.text
 
+@pytest.mark.verifies_requirement("F-Client-003")
 def test_device_agent_smbus_write_block_data_no_bus(mock_device_agent_dependencies):
     """Test _smbus_write_block_data raises error if bus not available."""
     agent = DeviceAgent(mock_device_agent_dependencies["mock_client_instance"], mock_device_agent_dependencies["mock_nats_client_instance"])
@@ -861,6 +898,7 @@ def test_device_agent_smbus_write_block_data_no_bus(mock_device_agent_dependenci
     with pytest.raises(SMBusNotAvailable):
         agent._smbus_write_block_data(0x42, 0x01, [0x10])
 
+@pytest.mark.verifies_requirement("F-Client-003")
 def test_device_agent_smbus_read_block_data_no_bus(mock_device_agent_dependencies):
     """Test _smbus_read_block_data raises error if bus not available."""
     agent = DeviceAgent(mock_device_agent_dependencies["mock_client_instance"], mock_device_agent_dependencies["mock_nats_client_instance"])
@@ -868,6 +906,7 @@ def test_device_agent_smbus_read_block_data_no_bus(mock_device_agent_dependencie
     with pytest.raises(SMBusNotAvailable):
         agent._smbus_read_block_data(0x42, 0x01, 1)
 
+@pytest.mark.verifies_requirement("F-Client-003")
 def test_device_agent_smbus_write_block_data_error(mock_device_agent_dependencies, caplog):
     """Test _smbus_write_block_data handles write errors."""
     agent = DeviceAgent(mock_device_agent_dependencies["mock_client_instance"], mock_device_agent_dependencies["mock_nats_client_instance"], smbus_address=0x42, smbus_bus_num=1)
@@ -878,6 +917,7 @@ def test_device_agent_smbus_write_block_data_error(mock_device_agent_dependencie
             agent._smbus_write_block_data(0x42, 0x01, [0x10])
         assert "SMBus write failed: Write error" in caplog.text
 
+@pytest.mark.verifies_requirement("F-Client-003")
 def test_device_agent_smbus_read_block_data_error(mock_device_agent_dependencies, caplog):
     """Test _smbus_read_block_data handles read errors."""
     agent = DeviceAgent(mock_device_agent_dependencies["mock_client_instance"], mock_device_agent_dependencies["mock_nats_client_instance"], smbus_address=0x42, smbus_bus_num=1)
@@ -888,6 +928,7 @@ def test_device_agent_smbus_read_block_data_error(mock_device_agent_dependencies
             agent._smbus_read_block_data(0x42, 0x01, 1)
         assert "SMBus read failed: Read error" in caplog.text
 
+@pytest.mark.verifies_requirement("F-Client-002")
 def test_device_agent_collect_telemetry_psutil_not_installed(mock_device_agent_dependencies, caplog):
     """Test _collect_telemetry logs warning and returns default values if psutil is None."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -902,6 +943,7 @@ def test_device_agent_collect_telemetry_psutil_not_installed(mock_device_agent_d
             assert telemetry["system_metrics"]["memory_total_mb"] == 0.0 # Changed to check mb
             assert telemetry["system_metrics"]["disk_total_gb"] == 0.0 # Changed to check gb
             assert telemetry["system_metrics"]["temperature_celsius"] == 0.0
+            assert telemetry["system_info"]["platform"] == platform.system() # Should still get basic platform info
 
 def test_device_agent_collect_telemetry_structure(mock_device_agent_dependencies):
     """Test _collect_telemetry aggregates data from helper methods."""
@@ -917,11 +959,11 @@ def test_device_agent_collect_telemetry_structure(mock_device_agent_dependencies
         patch("equus_express.edge_device_controller.DeviceAgent._get_temperature", return_value=45.0),
         patch.object(agent.client, '_get_ip_address', return_value=MOCK_IP_ADDRESS), # Mock method on the client instance
         patch("equus_express.edge_device_controller.psutil", MagicMock()), # Ensure psutil is mocked as available
-    ):
+    ) as mock_patches: # Alias the context manager to allow checking its mocks if needed
         telemetry = agent._collect_telemetry()
 
     assert "timestamp" in telemetry
-    assert telemetry["device_id"] == TEST_DEVICE_ID # Device ID should be present at top level
+    assert telemetry["device_id"] == TEST_DEVICE_ID
     assert "system_info" in telemetry
     assert "network_info" in telemetry
     assert "system_metrics" in telemetry
@@ -941,6 +983,7 @@ def test_device_agent_collect_telemetry_structure(mock_device_agent_dependencies
     assert telemetry["system_metrics"]["disk_used_percent"] == pytest.approx(70.0)
     assert telemetry["system_metrics"]["temperature_celsius"] == pytest.approx(45.0)
 
+@pytest.mark.verifies_requirement("F-Client-002")
 def test_device_agent_collect_telemetry_error_handling_individual_metrics(
     mock_device_agent_dependencies, caplog
 ):
@@ -953,6 +996,7 @@ def test_device_agent_collect_telemetry_error_handling_individual_metrics(
          patch.object(agent.client, '_get_ip_address', return_value=MOCK_IP_ADDRESS): # Mock this consistently
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("6.2")
 async def test_device_agent_run_telemetry_loop_communication_error(mock_device_agent_dependencies, caplog):
     """Test telemetry loop handles client communication errors."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -1003,6 +1047,7 @@ async def test_device_agent_run_telemetry_loop_unexpected_error(mock_device_agen
     assert mock_asyncio_sleep.call_count == 4
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("F-NATS-005")
 async def test_device_agent_handle_command_message_success(mock_device_agent_dependencies):
     """Test _handle_command_message processes a valid command."""
     mock_nats_client = mock_device_agent_dependencies["mock_nats_client_instance"]
@@ -1042,6 +1087,7 @@ async def test_device_agent_handle_command_message_invalid_json(mock_device_agen
     assert "Invalid JSON command format." in published_data["message"]
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("F-NATS-005")
 async def test_device_agent_handle_command_message_missing_type(mock_device_agent_dependencies, caplog):
     """Test _handle_command_message handles missing command type."""
     mock_nats_client = mock_device_agent_dependencies["mock_nats_client_instance"]
@@ -1082,6 +1128,7 @@ async def test_device_agent_handle_command_message_unknown_command(mock_device_a
     assert "Unknown command type: unknown_command" in published_data["message"]
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("F-NATS-005")
 async def test_device_agent_handle_command_message_exception_during_execution(mock_device_agent_dependencies, caplog):
     """Test _handle_command_message handles exceptions during command execution."""
     mock_nats_client = mock_device_agent_dependencies["mock_nats_client_instance"]
@@ -1129,6 +1176,7 @@ async def test_device_agent_handle_command_update_config_invalid(mock_device_age
         await agent._handle_command("update_config", params)
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("F-NATS-005")
 async def test_device_agent_handle_command_smbus_write_success(mock_device_agent_dependencies):
     """Test _handle_command for 'smbus_write' success."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -1142,6 +1190,7 @@ async def test_device_agent_handle_command_smbus_write_success(mock_device_agent
         mock_write.assert_called_once_with(0x42, 0x01, [0x10, 0x20])
         assert result == {"message": "SMBus write successful."}
 
+@pytest.mark.asyncio
 @pytest.mark.asyncio
 async def test_device_agent_handle_command_smbus_read_success(mock_device_agent_dependencies):
     """Test _handle_command for 'smbus_read' success."""
@@ -1166,6 +1215,7 @@ def test_device_agent_smbus_init_success(mock_device_agent_dependencies):
         MockSMBus.assert_called_once_with(1)
         assert agent.smbus_bus is not None
 
+@pytest.mark.verifies_requirement("6.2")
 def test_device_agent_smbus_init_failure(mock_device_agent_dependencies, caplog):
     """Test SMBus initialization failure."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -1176,6 +1226,7 @@ def test_device_agent_smbus_init_failure(mock_device_agent_dependencies, caplog)
             assert agent.smbus_bus is None
             assert "Failed to initialize SMBus on bus 1: SMBus init error" in caplog.text
 
+@pytest.mark.verifies_requirement("6.2")
 def test_device_agent_smbus_not_installed(mock_device_agent_dependencies, caplog):
     """Test SMBus initialization when smbus2 is not installed."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -1193,6 +1244,7 @@ def test_device_agent_smbus_write_block_data_no_bus(mock_device_agent_dependenci
     with pytest.raises(SMBusNotAvailable):
         agent._smbus_write_block_data(0x42, 0x01, [0x10])
 
+@pytest.mark.verifies_requirement("F-Client-003")
 def test_device_agent_smbus_read_block_data_no_bus(mock_device_agent_dependencies):
     """Test _smbus_read_block_data raises error if bus not available."""
     agent = DeviceAgent(mock_device_agent_dependencies["mock_client_instance"], mock_device_agent_dependencies["mock_nats_client_instance"])
@@ -1200,6 +1252,7 @@ def test_device_agent_smbus_read_block_data_no_bus(mock_device_agent_dependencie
     with pytest.raises(SMBusNotAvailable):
         agent._smbus_read_block_data(0x42, 0x01, 1)
 
+@pytest.mark.verifies_requirement("F-Client-003")
 def test_device_agent_smbus_write_block_data_error(mock_device_agent_dependencies, caplog):
     """Test _smbus_write_block_data handles write errors."""
     agent = DeviceAgent(mock_device_agent_dependencies["mock_client_instance"], mock_device_agent_dependencies["mock_nats_client_instance"], smbus_address=0x42, smbus_bus_num=1)
@@ -1210,6 +1263,7 @@ def test_device_agent_smbus_write_block_data_error(mock_device_agent_dependencie
             agent._smbus_write_block_data(0x42, 0x01, [0x10])
         assert "SMBus write failed: Write error" in caplog.text
 
+@pytest.mark.verifies_requirement("F-Client-003")
 def test_device_agent_smbus_read_block_data_error(mock_device_agent_dependencies, caplog):
     """Test _smbus_read_block_data handles read errors."""
     agent = DeviceAgent(mock_device_agent_dependencies["mock_client_instance"], mock_device_agent_dependencies["mock_nats_client_instance"], smbus_address=0x42, smbus_bus_num=1)
@@ -1220,6 +1274,7 @@ def test_device_agent_smbus_read_block_data_error(mock_device_agent_dependencies
             agent._smbus_read_block_data(0x42, 0x01, 1)
         assert "SMBus read failed: Read error" in caplog.text
 
+@pytest.mark.verifies_requirement("F-Client-002")
 def test_device_agent_collect_telemetry_psutil_not_installed(mock_device_agent_dependencies, caplog):
     """Test _collect_telemetry logs warning and returns default values if psutil is None."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -1336,10 +1391,12 @@ def test_device_agent_collect_telemetry_error_handling_individual_metrics(
         caplog.clear()
 
 
+@pytest.mark.verifies_requirement("F-Client-002")
 def test_device_agent_get_uptime():
     """Test _get_uptime returns psutil.boot_time()."""
     with patch("equus_express.edge_device_controller.psutil") as mock_psutil:
         mock_psutil.boot_time.return_value = 12345.67
+        # Mock current time to calculate uptime as difference from boot_time
         with patch("equus_express.edge_device_controller.time.time", return_value=12345.67 + 100.0): # Mock current time for consistent uptime
             agent = DeviceAgent(MagicMock(), MagicMock()) # Dummy agent
             assert agent._get_uptime() == 100.0 # Expected uptime
@@ -1347,6 +1404,7 @@ def test_device_agent_get_uptime():
 
 def test_device_agent_get_cpu_usage():
     """Test _get_cpu_usage returns psutil.cpu_percent()."""
+    @pytest.mark.verifies_requirement("F-Client-002")
     with patch("equus_express.edge_device_controller.psutil") as mock_psutil:
         mock_psutil.cpu_percent.return_value = 50.5
         agent = DeviceAgent(MagicMock(), MagicMock())
@@ -1354,6 +1412,7 @@ def test_device_agent_get_cpu_usage():
         mock_psutil.cpu_percent.assert_called_once_with(interval=None)
 
 def test_device_agent_get_memory_usage():
+    @pytest.mark.verifies_requirement("F-Client-002")
     """Test _get_memory_usage returns formatted memory stats."""
     with patch("equus_express.edge_device_controller.psutil") as mock_psutil:
         mock_mem = MagicMock()
@@ -1363,7 +1422,7 @@ def test_device_agent_get_memory_usage():
         mock_mem.free = 8 * (1024**3) # 8 GB
         mock_mem.percent = 50.0
         mock_psutil.virtual_memory.return_value = mock_mem # No change here
-        agent = DeviceAgent(MagicMock(), MagicMock())
+        agent = DeviceAgent(MagicMock(), MagicMock()) # No change here
         result = agent._get_memory_usage()
         assert result["total_gb"] == 16.0
         assert result["available_gb"] == 8.0
@@ -1373,6 +1432,7 @@ def test_device_agent_get_memory_usage():
         mock_psutil.virtual_memory.assert_called_once()
 
 def test_device_agent_get_disk_usage():
+    @pytest.mark.verifies_requirement("F-Client-002")
     """Test _get_disk_usage returns formatted disk stats."""
     with patch("equus_express.edge_device_controller.psutil") as mock_psutil:
         mock_disk = MagicMock()
@@ -1382,7 +1442,7 @@ def test_device_agent_get_disk_usage():
         mock_disk.percent = 70.0
         mock_psutil.disk_usage.return_value = mock_disk # No change here
         agent = DeviceAgent(MagicMock(), MagicMock())
-        result = agent._get_disk_usage()
+        result = agent._get_disk_usage() # No change here
         assert result["total_gb"] == 100.0
         assert result["used_gb"] == 70.0
         assert result["free_gb"] == 30.0
@@ -1390,6 +1450,7 @@ def test_device_agent_get_disk_usage():
         mock_psutil.disk_usage.assert_called_once_with('/')
 
 def test_device_agent_get_temperature_coretemp():
+    @pytest.mark.verifies_requirement("F-Client-002")
     """Test _get_temperature returns coretemp if available."""
     with patch("equus_express.edge_device_controller.psutil") as mock_psutil:
         mock_temp_sensor = MagicMock()
@@ -1399,6 +1460,7 @@ def test_device_agent_get_temperature_coretemp():
         assert agent._get_temperature() == 60.5
         mock_psutil.sensors_temperatures.assert_called_once()
 
+@pytest.mark.verifies_requirement("F-Client-002")
 def test_device_agent_get_temperature_cpu_thermal():
     """Test _get_temperature returns cpu_thermal if coretemp not available."""
     with patch("equus_express.edge_device_controller.psutil") as mock_psutil:
@@ -1409,6 +1471,7 @@ def test_device_agent_get_temperature_cpu_thermal():
         assert agent._get_temperature() == 55.0
         mock_psutil.sensors_temperatures.assert_called_once()
 
+@pytest.mark.verifies_requirement("F-Client-002")
 def test_device_agent_get_temperature_not_available():
     """Test _get_temperature returns 0.0 if no temperature data."""
     with patch("equus_express.edge_device_controller.psutil") as mock_psutil:
@@ -1417,6 +1480,7 @@ def test_device_agent_get_temperature_not_available():
         assert agent._get_temperature() == 0.0
         mock_psutil.sensors_temperatures.assert_called_once()
 
+@pytest.mark.verifies_requirement("F-Client-002")
 def test_device_agent_get_temperature_psutil_no_sensors_temperatures():
     """Test _get_temperature returns 0.0 if psutil has no sensors_temperatures."""
     with patch("equus_express.edge_device_controller.psutil") as mock_psutil:
@@ -1425,6 +1489,7 @@ def test_device_agent_get_temperature_psutil_no_sensors_temperatures():
         assert agent._get_temperature() == 0.0
         # mock_psutil.assert_not_called() # sensors_temperatures not called if attribute missing, but psutil itself is still accessed.
 
+@pytest.mark.verifies_requirement("F-Client-001")
 def test_device_agent_get_ip_address(mock_device_agent_dependencies):
     """Test DeviceAgent._get_ip_address calls SecureAPIClient._get_ip_address."""
     mock_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -1434,6 +1499,7 @@ def test_device_agent_get_ip_address(mock_device_agent_dependencies):
     mock_client._get_ip_address.assert_called_once()
 
 # --- SecureAPIClient._get_ip_address tests (moved from DeviceAgent tests) ---
+@pytest.mark.verifies_requirement("F-Client-001")
 def test_secure_client_get_ip_address_success():
     """Test _get_ip_address returns a valid IP."""
     client = SecureAPIClient(base_url=TEST_BASE_URL, device_id=TEST_DEVICE_ID, key_dir="/tmp/keys")
@@ -1444,6 +1510,7 @@ def test_secure_client_get_ip_address_success():
         mock_sock_instance.connect.assert_called_once_with(("8.8.8.8", 80))
         mock_sock_instance.close.assert_called_once()
 
+@pytest.mark.verifies_requirement("F-Client-001")
 def test_secure_client_get_ip_address_fallback_to_localhost():
     """Test _get_ip_address falls back to 127.0.0.1 if all attempts fail."""
     client = SecureAPIClient(base_url=TEST_BASE_URL, device_id=TEST_DEVICE_ID, key_dir="/tmp/keys")
@@ -1452,6 +1519,7 @@ def test_secure_client_get_ip_address_fallback_to_localhost():
             assert client._get_ip_address() == "unknown" # Expecting 'unknown' as final fallback in edge_device_controller.py
 
 # --- Main function tests ---
+@pytest.mark.verifies_requirement("F-Main-001")
 @pytest.mark.asyncio
 async def test_main_success(mock_device_agent_dependencies, caplog):
     """Test main function runs successfully."""
@@ -1482,6 +1550,7 @@ async def test_main_success(mock_device_agent_dependencies, caplog):
     assert "Device Agent stopped." in caplog.text # Changed from "Agent stopped gracefully."
 
 @pytest.mark.asyncio
+@pytest.mark.verifies_requirement("F-Main-001")
 async def test_main_agent_start_failure(mock_device_agent_dependencies, caplog):
     """Test main function handles device agent failing to start."""
     mock_api_client = mock_device_agent_dependencies["mock_client_instance"]
@@ -1502,6 +1571,7 @@ async def test_main_agent_start_failure(mock_device_agent_dependencies, caplog):
     assert "Agent encountered a critical error: Agent start failed" in caplog.text
     assert "Device Agent stopped." in caplog.text # Stop message should still appear
 
+@pytest.mark.verifies_requirement("F-Main-001")
 @pytest.mark.asyncio
 async def test_main_client_init_critical_error(mock_crypto, caplog):
     """Test main function handles critical client initialization error."""
@@ -1519,6 +1589,7 @@ async def test_main_client_init_critical_error(mock_crypto, caplog):
     assert "Agent encountered a critical error: Failed to initialize client keys: Critical init error" in caplog.text
     assert "Device Agent stopped." not in caplog.text # Agent was never started, so no graceful stop message
 
+@pytest.mark.verifies_requirement("F-Main-001")
 @pytest.mark.asyncio
 async def test_main_unexpected_error(caplog):
     """Test main function handles unexpected general exceptions during setup."""
