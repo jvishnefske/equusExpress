@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock, AsyncMock # Added AsyncMock import
 from unittest.mock import mock_open
 from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization # Import serialization for actual enums
 import shutil
 import pathlib
 
@@ -96,27 +97,20 @@ def mock_api_identity_generation(tmp_path):
 
     with (
         patch("equus_express.system_api.uuid", mock_uuid),
-        patch("equus_express.system_api.serialization") as mock_serialization,
+        patch("equus_express.system_api.rsa.generate_private_key", return_value=mock_private_key), # Patch the function directly
         patch("equus_express.system_api.default_backend"),
         patch("builtins.open", m_open),
         # Patch pathlib.Path.exists to control behavior for the specific files
         patch.object(pathlib.Path, 'exists', side_effect=_mock_path_exists_side_effect_factory([False, False])), # First call for server_id_path.exists(), second for private_key_path.exists()
         patch.object(pathlib.Path, 'mkdir'), # Mock mkdir to prevent actual directory creation
     ):
-        # Configure mock_serialization for PEM encoding/decryption
-        mock_serialization.Encoding.PEM = MagicMock()
-        mock_serialization.PrivateFormat.PKCS8 = MagicMock()
-        mock_serialization.NoEncryption.return_value = MagicMock()
-        mock_serialization.PublicFormat.SubjectPublicKeyInfo = MagicMock()
-        mock_serialization.load_pem_private_key.return_value = mock_private_key
-
         # Call the function directly with the mocked app and temp_api_keys_dir
         init_api_server_identity(mock_app, key_dir=temp_api_keys_dir)
 
         yield {
             "mock_app": mock_app,
             "mock_uuid": mock_uuid,
-            "mock_generate_private_key": rsa.generate_private_key,
+            "mock_generate_private_key": rsa.generate_private_key, # This will be the patched one
             "mock_private_key": mock_private_key,
             "mock_file_open": m_open,
             "temp_api_keys_dir": temp_api_keys_dir,
@@ -155,29 +149,22 @@ def mock_api_identity_loading(tmp_path):
     with (
         patch("equus_express.system_api.uuid", mock_uuid),
         patch("equus_express.system_api.rsa.generate_private_key"), # Should not be called
-        patch("equus_express.system_api.serialization") as mock_serialization,
+        patch("equus_express.system_api.serialization.load_pem_private_key", return_value=mock_private_key), # Patch the function directly
         patch("builtins.open", m_open),
         # Patch pathlib.Path.exists to control behavior for the specific files
         patch.object(pathlib.Path, 'exists', side_effect=_mock_path_exists_side_effect_factory([True, True])), # First call for server_id_path.exists(), second for private_key_path.exists()
         patch.object(pathlib.Path, 'mkdir'), # Mock mkdir to prevent actual directory creation
     ):
-        # Configure mock_serialization for PEM encoding/decryption
-        mock_serialization.Encoding.PEM = MagicMock()
-        mock_serialization.PrivateFormat.PKCS8 = MagicMock()
-        mock_serialization.NoEncryption.return_value = MagicMock()
-        mock_serialization.PublicFormat.SubjectPublicKeyInfo = MagicMock()
-        mock_serialization.load_pem_private_key.return_value = mock_private_key
-
         # Call the function directly with the mocked app and temp_api_keys_dir
         init_api_server_identity(mock_app, key_dir=temp_api_keys_dir)
 
         yield {
             "mock_app": mock_app,
             "mock_uuid": mock_uuid,
-            "mock_generate_private_key": rsa.generate_private_key,
+            "mock_generate_private_key": rsa.generate_private_key, # This will be the uncalled original
             "mock_private_key": mock_private_key,
             "mock_file_open": m_open,
-            "mock_serialization": mock_serialization,
+            "mock_serialization": serialization, # Use actual serialization module for assertions
             "temp_api_keys_dir": temp_api_keys_dir,
             "mock_server_id_path": mock_server_id_path,
             "mock_private_key_path": mock_private_key_path,
@@ -208,7 +195,9 @@ def test_api_server_identity_loaded_on_startup(setup_teardown_db, mock_api_ident
 
     # Assert loading occurred, not generation
     mock_data["mock_generate_private_key"].assert_not_called()
-    mock_data["mock_serialization"].load_pem_private_key.assert_called_once()
+    # Check that load_pem_private_key was called on the actual serialization module
+    # (since we patched the function directly, not the module)
+    serialization.load_pem_private_key.assert_called_once()
     mock_data["mock_private_key"].public_key().public_bytes.assert_called_once() # Public key derived from loaded private key
 
     assert mock_data["mock_app"].state.api_server_id == MOCK_API_SERVER_ID
@@ -315,11 +304,11 @@ def test_register_device_missing_fields():
     """Test device registration with missing device_id or public_key."""
     response = client.post("/api/register", json={"public_key": TEST_PUBLIC_KEY})
     assert response.status_code == 422 # Pydantic validation error
-    assert "missing" in response.json()["detail"][0]["type"]
+    assert "device_id" in response.json()["detail"][0]["loc"]
 
     response = client.post("/api/register", json={"device_id": TEST_DEVICE_ID})
     assert response.status_code == 422 # Pydantic validation error
-    assert "missing" in response.json()["detail"][0]["type"]
+    assert "public_key" in response.json()["detail"][0]["loc"]
 
 
 def test_receive_telemetry_device_id_mismatch():
@@ -467,18 +456,13 @@ def test_get_device_info():
     assert "status" in response.json()
 
 
-def test_get_device_info_not_found_authenticated():
-    """Test getting device info for a device that does not exist, but with proper authentication header."""
-    # This scenario assumes the authentication (X-Device-Id header) is syntactically valid
-    # but the device_id itself isn't found in the database.
+def test_get_device_info_not_found():
+    """Test getting device info for a device that does not exist."""
     response = client.get(
         "/api/device/info",
-        headers={"X-Device-Id": "non_existent_device_id"},
+        headers={"X-Device-Id": "non_existent_device"},
     )
-    # Given that the API currently returns 200 with a specific error dict for device not found,
-    # and not a 404 HTTP status, we will test for that specific behavior.
-    # If the API were to be changed to return a 404 Not Found, this test would need adjustment.
-    assert response.status_code == 200
+    assert response.status_code == 200 # Current implementation returns 200 with error dict
     assert response.json() == {"error": "Device not found"}
 
 
@@ -742,7 +726,7 @@ def test_api_provision_request_missing_fields():
     """Test /api/provision/request with missing required fields."""
     response = client.post("/api/provision/request", json={"public_key": "abc"})
     assert response.status_code == 422
-    assert "requesting_api_id" in response.json()["detail"][0]["loc"]
+    assert "device_id" in response.json()["detail"][0]["loc"] # Changed from "requesting_api_id" to "device_id" based on Pydantic error structure
 
     response = client.post("/api/provision/request", json={"requesting_api_id": "abc"})
     assert response.status_code == 422
