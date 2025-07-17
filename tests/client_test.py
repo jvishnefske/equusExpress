@@ -675,30 +675,6 @@ async def test_device_agent_run_telemetry_loop_communication_error(mock_device_a
     # Verify that asyncio.sleep was called 4 times as configured
     assert mock_asyncio_sleep.call_count == 4
 
-@pytest.mark.asyncio
-async def test_device_agent_run_telemetry_loop_communication_error(mock_device_agent_dependencies, caplog):
-    """Test telemetry loop handles client communication errors."""
-    mock_client = mock_device_agent_dependencies["mock_client_instance"]
-    mock_asyncio_sleep = mock_device_agent_dependencies["mock_asyncio_sleep"]
-    agent = DeviceAgent(mock_client, mock_device_agent_dependencies["mock_nats_client_instance"])
-
-    # Simulate an error on the first send, then stop on the second
-    mock_client.send_telemetry.side_effect = [
-        httpx.RequestError("Simulated connection error", request=httpx.Request("POST", TEST_BASE_URL)),
-        AsyncMock(), # For the second successful send
-        asyncio.CancelledError # Stop the loop after the third iteration
-    ]
-    mock_asyncio_sleep.side_effect = [AsyncMock(), AsyncMock(), AsyncMock(), asyncio.CancelledError] # Allow sleeps
-
-    with caplog.at_level(logging.ERROR):
-        with patch("equus_express.edge_device_controller.DeviceAgent._collect_telemetry", return_value={"mock_data": 123}):
-            with pytest.raises(asyncio.CancelledError):
-                await agent.run_telemetry_loop(interval=1)
-
-    assert "Error collecting or sending telemetry: Simulated connection error" in caplog.text
-    mock_client.update_status.assert_awaited_with("warning", {"message": "Telemetry error: Simulated connection error"})
-    assert mock_client.send_telemetry.call_count == 2 # First call raises error, second is successful
-    assert mock_asyncio_sleep.call_count == 4 # 0.1s sleep, 1s sleep, 0.1s sleep, 1s sleep, 0.1s sleep, 1s sleep (cancelled)
 
 @pytest.mark.asyncio
 async def test_device_agent_run_telemetry_loop_unexpected_error(mock_device_agent_dependencies, caplog):
