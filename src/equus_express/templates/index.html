@@ -3,59 +3,487 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Equus Express IoT Server</title>
-    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <title>Equus Bioreactor Control System</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
+        * {
             margin: 0;
             padding: 0;
-            background-color: #f4f4f4;
-            color: #333;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            color: #ffffff;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: #2d2d2d;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #444;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4a9eff;
+        }
+
+        .status-badge {
+            background: #28a745;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .emergency-stop {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            height: calc(100vh - 60px);
+        }
+
+        .sidebar {
+            background: #2d2d2d;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 1px solid #444;
+        }
+
+        .sidebar h3 {
+            color: #4a9eff;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            margin-bottom: 20px;
+        }
+
+        .sidebar li {
+            padding: 8px 0;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .sidebar li:hover {
+            color: #4a9eff;
+        }
+
+        .sidebar li.active {
+            color: #4a9eff;
+            font-weight: bold;
+        }
+
+        .content {
+            padding: 20px;
+            overflow-y: auto;
+            background: #1a1a1a;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .panel {
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #444;
+        }
+
+        .panel h3 {
+            color: #4a9eff;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        .sensor-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .sensor-item {
+            background: #1a1a1a;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #444;
+        }
+
+        .sensor-label {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 5px;
+        }
+
+        .sensor-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #4a9eff;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        .control-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #444;
+        }
+
+        .control-item:last-child {
+            border-bottom: none;
+        }
+
+        .control-label {
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .control-value {
+            color: #4a9eff;
+        }
+
+        .button {
+            background: #4a9eff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.3s;
+        }
+
+        .button:hover {
+            background: #357abd;
+        }
+
+        .button.danger {
+            background: #dc3545;
+        }
+
+        .button.danger:hover {
+            background: #c82333;
+        }
+
+        .button.success {
+            background: #28a745;
+        }
+
+        .button.success:hover {
+            background: #218838;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .input-group input {
+            background: #1a1a1a;
+            border: 1px solid #444;
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 4px;
+            width: 80px;
+        }
+
+        .chart-container {
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #444;
+            height: 400px;
+            position: relative;
+        }
+
+        .chart-placeholder {
+            width: 100%;
+            height: 100%;
+            background: #1a1a1a;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .wide-panel {
+            grid-column: 1 / -1;
+        }
+
+        .pump-control {
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+
+        .pump-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .pump-name {
+            font-weight: bold;
+            color: #4a9eff;
+        }
+
+        .pump-status {
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: bold;
+        }
+
+        .pump-status.active {
+            background: #28a745;
+            color: white;
+        }
+
+        .pump-status.inactive {
+            background: #6c757d;
+            color: white;
+        }
+
+        .pump-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .slider {
+            -webkit-appearance: none;
+            width: 100px;
+            height: 5px;
+            border-radius: 5px;
+            background: #444;
+            outline: none;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: #4a9eff;
+            cursor: pointer;
+        }
+
+        .process-status {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #444;
+            margin-bottom: 15px;
+        }
+
+        .process-info {
             display: flex;
             flex-direction: column;
-            min-height: 100vh;
         }
-        header {
-            background-color: #0056b3;
+
+        .process-name {
+            font-weight: bold;
+            color: #4a9eff;
+            margin-bottom: 5px;
+        }
+
+        .process-details {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .tabs {
+            display: flex;
+            background: #2d2d2d;
+            border-radius: 8px 8px 0 0;
+            border: 1px solid #444;
+            border-bottom: none;
+        }
+
+        .tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            border-right: 1px solid #444;
+            transition: background-color 0.3s;
+        }
+
+        .tab:last-child {
+            border-right: none;
+        }
+
+        .tab.active {
+            background: #4a9eff;
             color: white;
-            padding: 1rem 0;
-            text-align: center;
         }
-        main {
-            flex: 1;
+
+        .tab:hover:not(.active) {
+            background: #3a3a3a;
+        }
+
+        .tab-content {
+            background: #2d2d2d;
+            border: 1px solid #444;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
             padding: 20px;
-            max-width: 800px;
-            margin: 20px auto;
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
-        h1, h2 {
-            color: #0056b3;
+
+        .alarms-list {
+            max-height: 200px;
+            overflow-y: auto;
         }
-        a {
-            color: #0056b3;
-            text-decoration: none;
+
+        .alarm-item {
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
-        a:hover {
-            text-decoration: underline;
+
+        .alarm-critical {
+            border-left: 4px solid #dc3545;
         }
-        footer {
-            background-color: #333;
-            color: white;
+
+        .alarm-warning {
+            border-left: 4px solid #ffc107;
+        }
+
+        .alarm-info {
+            border-left: 4px solid #17a2b8;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .connection-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #28a745;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .bioreactor-vessel {
+            background: #1a1a1a;
+            border: 2px solid #4a9eff;
+            border-radius: 20px;
+            padding: 20px;
             text-align: center;
-            padding: 1rem 0;
-            margin-top: auto;
+            position: relative;
+            height: 300px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .vessel-level {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            height: 200px;
+            background: linear-gradient(to top, #4a9eff20, transparent);
+            border-radius: 10px;
+            border: 1px solid #4a9eff40;
+        }
+
+        .vessel-info {
+            position: relative;
+            z-index: 2;
         }
     </style>
 </head>
 <body>
-    <header>
-        <h1>Welcome to Equus Express IoT Server</h1>
-    </header>
-    <main>
-        <p>This is the landing page for your Secure IoT API Server. From here, you can explore various functionalities and endpoints.</p>
+    <div class="header">
+        <div class="logo">Equus Bioreactor Control</div>
+        <div class="connection-status">
+            <span>WebSocket:</span>
+            <div class="connection-dot"></div>
+            <span id="connection-status">Connected</span>
+        </div>
+        <div class="status-badge">Running</div>
+        <button class="emergency-stop" onclick="emergencyStop()">🛑 Emergency Stop</button>
+    </div>
+
+    <div class="main-container">
+
+        <div class="sidebar">
+            <h3>System Control</h3>
+            <ul>
+                <li class="active" onclick="showTab('dashboard')">Dashboard</li>
+                <li onclick="showTab('sensors')">Sensors</li>
+                <li onclick="showTab('pumps')">Pumps & Valves</li>
+                <li onclick="showTab('heating')">Heating System</li>
+                <li onclick="showTab('process')">Process Control</li>
+            </ul>
+
+            <h3>Monitoring</h3>
+            <ul>
+                <li onclick="showTab('charts')">Real-time Charts</li>
+                <li onclick="showTab('alarms')">Alarms & Events</li>
+                <li onclick="showTab('logs')">System Logs</li>
+                <li onclick="showTab('trends')">Historical Data</li>
+            </ul>
+
+            <h3>Configuration</h3>
+            <ul>
+                <li onclick="showTab('settings')">Settings</li>
+                <li onclick="showTab('calibration')">Calibration</li>
+                <li onclick="showTab('maintenance')">Maintenance</li>
+            </ul>
+        </div>
+
+        <div class="content">
+                    <div class="console">
+                <p>This is the landing page for your Secure IoT API Server. From here, you can explore various functionalities and endpoints.</p>
 
         <h2>API Endpoints:</h2>
         <ul>
@@ -73,9 +501,274 @@
         <p>
             You can find more information in the API documentation or by referring to the project's README.
         </p>
-    </main>
-    <footer>
-        <p>&copy; 2025 Equus Express. All rights reserved.</p>
-    </footer>
+            </div>
+            <div id="dashboard" class="tab-content-area">
+                <div class="dashboard-grid">
+                    <div class="panel">
+                        <h3>🦠 Bioreactor Status</h3>
+                        <div class="bioreactor-vessel">
+                            <div class="vessel-level"></div>
+                            <div class="vessel-info">
+                                <div style="font-size: 24px; margin-bottom: 10px;">🧪</div>
+                                <div class="sensor-value">2.5L</div>
+                                <div class="sensor-label">Current Volume</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <h3>🌡️ Environmental Sensors</h3>
+                        <div class="sensor-grid">
+                            <div class="sensor-item">
+                                <div class="sensor-label">Temperature</div>
+                                <div class="sensor-value">37.2°C</div>
+                            </div>
+                            <div class="sensor-item">
+                                <div class="sensor-label">Humidity</div>
+                                <div class="sensor-value">65.4%</div>
+                            </div>
+                            <div class="sensor-item">
+                                <div class="sensor-label">pH Level</div>
+                                <div class="sensor-value">6.8</div>
+                            </div>
+                            <div class="sensor-item">
+                                <div class="sensor-label">DO (mg/L)</div>
+                                <div class="sensor-value">4.2</div>
+                            </div>
+                            <div class="sensor-item">
+                                <div class="sensor-label">PM2.5</div>
+                                <div class="sensor-value">12 μg/m³</div>
+                            </div>
+                            <div class="sensor-item">
+                                <div class="sensor-label">ORP (mV)</div>
+                                <div class="sensor-value">-150</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <h3>⚙️ System Controls</h3>
+                        <div class="control-group">
+                            <div class="control-item">
+                                <span class="control-label">Agitator</span>
+                                <div class="input-group">
+                                    <input type="number" value="150" min="0" max="500">
+                                    <span>RPM</span>
+                                    <button class="button success">Set</button>
+                                </div>
+                            </div>
+                            <div class="control-item">
+                                <span class="control-label">Aeration</span>
+                                <div class="input-group">
+                                    <input type="number" value="2.5" min="0" max="10" step="0.1">
+                                    <span>L/min</span>
+                                    <button class="button success">Set</button>
+                                </div>
+                            </div>
+                            <div class="control-item">
+                                <span class="control-label">Heater</span>
+                                <div class="input-group">
+                                    <span class="control-value">ON - 75%</span>
+                                    <button class="button">Toggle</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <h3>🔄 Active Pumps</h3>
+                        <div class="pump-control">
+                            <div class="pump-header">
+                                <span class="pump-name">Nutrient Feed</span>
+                                <span class="pump-status active">ACTIVE</span>
+                            </div>
+                            <div class="pump-controls">
+                                <input type="range" min="0" max="100" value="75" class="slider">
+                                <span>75%</span>
+                                <button class="button danger">Stop</button>
+                            </div>
+                        </div>
+
+                        <div class="pump-control">
+                            <div class="pump-header">
+                                <span class="pump-name">pH Control</span>
+                                <span class="pump-status active">ACTIVE</span>
+                            </div>
+                            <div class="pump-controls">
+                                <input type="range" min="0" max="100" value="25" class="slider">
+                                <span>25%</span>
+                                <button class="button danger">Stop</button>
+                            </div>
+                        </div>
+
+                        <div class="pump-control">
+                            <div class="pump-header">
+                                <span class="pump-name">Harvest</span>
+                                <span class="pump-status inactive">INACTIVE</span>
+                            </div>
+                            <div class="pump-controls">
+                                <input type="range" min="0" max="100" value="0" class="slider">
+                                <span>0%</span>
+                                <button class="button">Start</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <h3>🎯 Process Parameters</h3>
+                        <div class="process-status">
+                            <div class="process-info">
+                                <div class="process-name">Batch #YST-2024-001</div>
+                                <div class="process-details">Started: 2024-07-15 08:30:00</div>
+                                <div class="process-details">Runtime: 6h 45m</div>
+                            </div>
+                            <div class="status-badge">Active</div>
+                        </div>
+                        <div class="control-item">
+                            <span class="control-label">Target Temp</span>
+                            <div class="input-group">
+                                <input type="number" value="37" min="20" max="50">
+                                <span>°C</span>
+                            </div>
+                        </div>
+                        <div class="control-item">
+                            <span class="control-label">Target pH</span>
+                            <div class="input-group">
+                                <input type="number" value="6.8" min="4" max="9" step="0.1">
+                                <button class="button success">Set</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <h3>⚠️ Recent Alarms</h3>
+                        <div class="alarms-list">
+                            <div class="alarm-item alarm-warning">
+                                <div>
+                                    <strong>pH Drift Warning</strong><br>
+                                    <small>pH dropped to 6.2 - auto-correction initiated</small>
+                                </div>
+                                <small>10:15 AM</small>
+                            </div>
+                            <div class="alarm-item alarm-info">
+                                <div>
+                                    <strong>Pump Cycle Complete</strong><br>
+                                    <small>Nutrient feed cycle completed successfully</small>
+                                </div>
+                                <small>09:30 AM</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-container wide-panel">
+                    <h3>📊 Real-Time Telemetry</h3>
+                    <div class="tabs">
+                        <div class="tab active" onclick="showChart('temperature')">Temperature</div>
+                        <div class="tab" onclick="showChart('ph')">pH Level</div>
+                        <div class="tab" onclick="showChart('oxygen')">Dissolved O₂</div>
+                        <div class="tab" onclick="showChart('biomass')">Biomass</div>
+                    </div>
+                    <div class="chart-placeholder" id="chart-display">
+                        📈 Real-time temperature chart would be displayed here<br>
+                        <small>Integration with Chart.js, D3.js, or similar charting library</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // WebSocket connection simulation
+        let ws = null;
+        let isConnected = false;
+
+        function initWebSocket() {
+            // Replace with your actual WebSocket endpoint
+            // ws = new WebSocket('ws://localhost:8080/ws');
+            
+            // Simulate connection for demo
+            setTimeout(() => {
+                isConnected = true;
+                document.getElementById('connection-status').textContent = 'Connected';
+                startSimulation();
+            }, 1000);
+        }
+
+        function startSimulation() {
+            // Simulate real-time data updates
+            setInterval(() => {
+                updateSensorData();
+            }, 2000);
+        }
+
+        function updateSensorData() {
+            // Simulate sensor data updates
+            const temperature = (37 + Math.random() * 0.5 - 0.25).toFixed(1);
+            const humidity = (65 + Math.random() * 2 - 1).toFixed(1);
+            const ph = (6.8 + Math.random() * 0.2 - 0.1).toFixed(1);
+            const oxygen = (4.2 + Math.random() * 0.3 - 0.15).toFixed(1);
+            const pm25 = Math.floor(12 + Math.random() * 4 - 2);
+            const orp = Math.floor(-150 + Math.random() * 20 - 10);
+
+            document.querySelectorAll('.sensor-value').forEach((element, index) => {
+                const values = [temperature + '°C', humidity + '%', ph, oxygen, pm25 + ' μg/m³', orp];
+                if (values[index]) {
+                    element.textContent = values[index];
+                }
+            });
+        }
+
+        function showTab(tabName) {
+            // Update sidebar active state
+            document.querySelectorAll('.sidebar li').forEach(li => {
+                li.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // This would show/hide different content areas
+            console.log('Switching to tab:', tabName);
+        }
+
+        function showChart(chartType) {
+            // Update chart tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Update chart display
+            const chartDisplay = document.getElementById('chart-display');
+            const chartTypes = {
+                temperature: '🌡️ Real-time temperature chart',
+                ph: '🧪 pH level monitoring chart',
+                oxygen: '💨 Dissolved oxygen levels',
+                biomass: '🦠 Biomass concentration'
+            };
+            
+            chartDisplay.innerHTML = `📈 ${chartTypes[chartType]} would be displayed here<br>
+                <small>Integration with Chart.js, D3.js, or similar charting library</small>`;
+        }
+
+        function emergencyStop() {
+            if (confirm('Are you sure you want to perform an emergency stop? This will halt all processes.')) {
+                // Send emergency stop command
+                console.log('Emergency stop activated');
+                alert('Emergency stop activated. All processes halted.');
+            }
+        }
+
+        // Initialize on page load
+        window.onload = function() {
+            initWebSocket();
+        };
+
+        // Handle WebSocket reconnection
+        window.addEventListener('beforeunload', function() {
+            if (ws) {
+                ws.close();
+            }
+        });
+    </script>
 </body>
 </html>
