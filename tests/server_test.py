@@ -101,7 +101,7 @@ def mock_api_identity_generation(tmp_path):
         patch("builtins.open", m_open),
         # Patch pathlib.Path.exists to control behavior for the specific files
         patch.object(pathlib.Path, 'exists', side_effect=_mock_path_exists_side_effect_factory([False, False])), # First call for server_id_path.exists(), second for private_key_path.exists()
-        patch.object(path_lib.Path, 'mkdir'), # Mock mkdir to prevent actual directory creation
+        patch.object(pathlib.Path, 'mkdir'), # Mock mkdir to prevent actual directory creation
     ):
         # Configure mock_serialization for PEM encoding/decryption
         mock_serialization.Encoding.PEM = MagicMock()
@@ -467,13 +467,18 @@ def test_get_device_info():
     assert "status" in response.json()
 
 
-def test_get_device_info_not_found():
-    """Test getting device info for a device that does not exist."""
+def test_get_device_info_not_found_authenticated():
+    """Test getting device info for a device that does not exist, but with proper authentication header."""
+    # This scenario assumes the authentication (X-Device-Id header) is syntactically valid
+    # but the device_id itself isn't found in the database.
     response = client.get(
         "/api/device/info",
-        headers={"X-Device-Id": "non_existent_device"},
+        headers={"X-Device-Id": "non_existent_device_id"},
     )
-    assert response.status_code == 200 # Current implementation returns 200 with error dict
+    # Given that the API currently returns 200 with a specific error dict for device not found,
+    # and not a 404 HTTP status, we will test for that specific behavior.
+    # If the API were to be changed to return a 404 Not Found, this test would need adjustment.
+    assert response.status_code == 200
     assert response.json() == {"error": "Device not found"}
 
 

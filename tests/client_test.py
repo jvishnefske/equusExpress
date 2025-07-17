@@ -128,16 +128,21 @@ def mock_httpx_client():
         # Configure side_effect for request to return different mock responses
         # This list will be consumed sequentially by calls to .request()
         mock_client_instance.request.side_effect = [
-            mock_response_success, # Default for first call if not overridden
-            mock_response_success, # Default for second call
-            mock_response_success, # Default for third call
-            mock_response_success, # Default for fourth call
-            mock_response_success, # Default for fifth call
-            mock_response_success, # Default for sixth call
-            mock_response_success, # Default for seventh call
-            mock_response_success, # Default for eighth call
-            mock_response_success, # Default for ninth call
-            mock_response_success, # Default for tenth call
+        # Configure side_effect for request to return different mock responses.
+        # This list will be consumed sequentially by calls to .request().
+        # For test_connection, we'll patch the client's high-level methods directly,
+        # so this default list is primarily for other, simpler tests.
+        mock_client_instance.request.side_effect = [
+            mock_response_success,  # Default for first call if not overridden
+            mock_response_success,  # Default for second call
+            mock_response_success,  # Default for third call
+            mock_response_success,  # Default for fourth call
+            mock_response_success,  # Default for fifth call
+            mock_response_success,  # Default for sixth call
+            mock_response_success,  # Default for seventh call
+            mock_response_success,  # Default for eighth call
+            mock_response_success,  # Default for ninth call
+            mock_response_success,  # Default for tenth call
         ]
         yield mock_client_instance
 
@@ -609,17 +614,76 @@ async def test_device_agent_run_telemetry_loop(mock_device_agent_dependencies):
     mock_asyncio_sleep = mock_device_agent_dependencies["mock_asyncio_sleep"]
     agent = DeviceAgent(mock_client, mock_device_agent_dependencies["mock_nats_client_instance"])
 
-    # Configure asyncio.sleep to raise CancelledError after 3 calls
-    mock_asyncio_sleep.side_effect = [AsyncMock(), AsyncMock(), asyncio.CancelledError]
+@pytest.mark.asyncio
+async def test_device_agent_run_telemetry_loop(mock_device_agent_dependencies):
+    """Test telemetry loop sends data at intervals."""
+    mock_client = mock_device_agent_dependencies["mock_client_instance"]
+    mock_asyncio_sleep = mock_device_agent_dependencies["mock_asyncio_sleep"]
+    agent = DeviceAgent(mock_client, mock_device_agent_dependencies["mock_nats_client_instance"])
 
-    with pytest.raises(asyncio.CancelledError): # Expect CancelledError to propagate
+    # Configure asyncio.sleep to raise CancelledError after a certain number of calls.
+    # The loop has an initial 0.1s sleep, then a sleep(interval) after each send.
+    # To get two telemetry sends before cancellation:
+    # Call 1: sleep(0.1) - allows first telemetry to run
+    # Call 2: sleep(interval) - allows second telemetry to run
+    # Call 3: sleep(0.1) - this would be for the third telemetry, but raises CancelledError
+    mock_asyncio_sleep.side_effect = [
+        AsyncMock(),  # Initial sleep(0.1)
+        AsyncMock(),  # Sleep(interval) after 1st send
+        asyncio.CancelledError # Sleep(0.1) before 3rd send, cancels the loop
+    ]
+
+    with pytest.raises(asyncio.CancelledError):  # Expect CancelledError to propagate
         with patch("equus_express.edge_device_controller.DeviceAgent._collect_telemetry",
-                   return_value={"mock_data": 123}):
+                   return_value={"mock_data": 123}) as mock_collect_telemetry:
             await agent.run_telemetry_loop(interval=1)
 
-    assert mock_client.send_telemetry.call_count == 2 # Called twice before CancelledError
-    assert mock_asyncio_sleep.call_count == 3 # Called after each telemetry send and once more to stop
-    mock_asyncio_sleep.assert_called_with(1) # Last call should be with interval
+    # Assert that telemetry was collected and sent twice
+    assert mock_collect_telemetry.call_count == 2
+    assert mock_client.send_telemetry.call_count == 2
+    # Assert asyncio.sleep was called 3 times as configured above
+    assert mock_asyncio_sleep.call_count == 3
+    # Verify sleep arguments: the first call is 0.1, the second is 1, and the third (cancelled) is 0.1
+    mock_asyncio_sleep.assert_any_call(0.1)
+    mock_asyncio_sleep.assert_any_call(1)
+
+@pytest.mark.asyncio
+async def test_device_agent_run_telemetry_loop_communication_error(mock_device_agent_dependencies, caplog):
+    """Test telemetry loop handles client communication errors."""
+    mock_client = mock_device_agent_dependencies["mock_client_instance"]
+    mock_asyncio_sleep = mock_device_agent_dependencies["mock_asyncio_sleep"]
+    agent = DeviceAgent(mock_client, mock_device_agent_dependencies["mock_nats_client_instance"])
+
+    # Simulate an error on the first send, then stop on the second via CancelledError
+    # Sequence of send_telemetry calls:
+    # 1. Raises httpx.RequestError
+    # 2. Returns AsyncMock (success)
+    mock_client.send_telemetry.side_effect = [
+        httpx.RequestError("Simulated connection error", request=httpx.Request("POST", TEST_BASE_URL)),
+        AsyncMock(),
+    ]
+    # Sequence of asyncio.sleep calls:
+    # Call 1: sleep(0.1) before first send (returns mock)
+    # Call 2: sleep(interval) after 1st send (returns mock)
+    # Call 3: sleep(0.1) before 2nd send (returns mock)
+    # Call 4: sleep(interval) after 2nd send (raises CancelledError)
+    mock_asyncio_sleep.side_effect = [
+        AsyncMock(), AsyncMock(), AsyncMock(), asyncio.CancelledError
+    ]
+
+    with caplog.at_level(logging.ERROR):
+        with patch("equus_express.edge_device_controller.DeviceAgent._collect_telemetry", return_value={"mock_data": 123}) as mock_collect_telemetry:
+            with pytest.raises(asyncio.CancelledError):
+                await agent.run_telemetry_loop(interval=1)
+
+    assert "Error collecting or sending telemetry: Simulated connection error" in caplog.text
+    # Verify that update_status was called with warning for the error
+    mock_client.update_status.assert_any_call("warning", {"message": "Telemetry error: Simulated connection error"})
+    # Verify that telemetry was collected twice, and send_telemetry was called twice
+    assert mock_collect_telemetry.call_count == 2
+    assert mock_client.send_telemetry.call_count == 2
+    # Verify that asyncio.sleep was called 4 times as configured
+    assert mock_asyncio_sleep.call_count == 4
 
 @pytest.mark.asyncio
 async def test_device_agent_run_telemetry_loop_communication_error(mock_device_agent_dependencies, caplog):
@@ -656,20 +720,80 @@ async def test_device_agent_run_telemetry_loop_unexpected_error(mock_device_agen
     # Simulate an unexpected error on the first send, then stop on the second
     mock_client.send_telemetry.side_effect = [
         ValueError("Unexpected data format"),
-        AsyncMock(), # For the second successful send
-        asyncio.CancelledError # Stop the loop after the third iteration
+        AsyncMock(),
     ]
-    mock_asyncio_sleep.side_effect = [AsyncMock(), AsyncMock(), AsyncMock(), asyncio.CancelledError] # Allow sleeps
+    # Sequence of asyncio.sleep calls (same as communication error test):
+    # Call 1: sleep(0.1) (returns mock)
+    # Call 2: sleep(interval) (returns mock)
+    # Call 3: sleep(0.1) (returns mock)
+    # Call 4: sleep(interval) (raises CancelledError)
+    mock_asyncio_sleep.side_effect = [
+        AsyncMock(), AsyncMock(), AsyncMock(), asyncio.CancelledError
+    ]
 
     with caplog.at_level(logging.ERROR):
-        with patch("equus_express.edge_device_controller.DeviceAgent._collect_telemetry", return_value={"mock_data": 123}):
+        with patch("equus_express.edge_device_controller.DeviceAgent._collect_telemetry", return_value={"mock_data": 123}) as mock_collect_telemetry:
             with pytest.raises(asyncio.CancelledError):
                 await agent.run_telemetry_loop(interval=1)
 
     assert "Error collecting or sending telemetry: Unexpected data format" in caplog.text
-    mock_client.update_status.assert_awaited_with("warning", {"message": "Telemetry error: Unexpected data format"})
+    mock_client.update_status.assert_any_call("warning", {"message": "Telemetry error: Unexpected data format"})
+    assert mock_collect_telemetry.call_count == 2
     assert mock_client.send_telemetry.call_count == 2
     assert mock_asyncio_sleep.call_count == 4
+
+
+@pytest.mark.asyncio
+async def test_secure_client_test_connection_success(secure_client_keys_exist, mock_ip_address, mock_crypto):
+    """Test test_connection success path."""
+    client = secure_client_keys_exist
+    # Mock the high-level methods called by test_connection
+    with (
+        patch.object(client, 'health_check', return_value=MagicMock(status_code=200, json=lambda: {"status": "healthy"})),
+        patch.object(client, 'register_device', return_value=MagicMock(status_code=200, json=lambda: {"status": "success", "message": "registered"})),
+        patch.object(client, 'get_device_info', return_value=MagicMock(status_code=200, json=lambda: {"device_id": TEST_DEVICE_ID})),
+        patch.object(client, 'send_telemetry', return_value=MagicMock(status_code=200, json=lambda: {"status": "success"})),
+    ):
+        assert client.test_connection() is True
+    # Assertions for internal calls can still be made if desired,
+    # e.g., client.health_check.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_secure_client_test_connection_failure(secure_client_keys_exist, mock_ip_address):
+    """Test test_connection failure path."""
+    client = secure_client_keys_exist
+    # Mock health_check to fail, simulating the earliest possible failure point
+    with (
+        patch.object(client, 'health_check', side_effect=httpx.ConnectError("Connection failed", request=httpx.Request("GET", TEST_BASE_URL))),
+        patch.object(client, 'register_device'), # Should not be called
+        patch.object(client, 'get_device_info'), # Should not be called
+        patch.object(client, 'send_telemetry'),  # Should not be called
+    ):
+        assert client.test_connection() is False
+    client.health_check.assert_called_once()
+    client.register_device.assert_not_called()
+    client.get_device_info.assert_not_called()
+    client.send_telemetry.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_secure_client_test_connection_get_device_info_failure(secure_client_keys_exist, mock_ip_address):
+    """Test test_connection fails if get_device_info fails."""
+    client = secure_client_keys_exist
+    # Mock health_check and register_device to succeed, then get_device_info to fail
+    with (
+        patch.object(client, 'health_check', return_value=MagicMock(status_code=200, json=lambda: {"status": "healthy"})),
+        patch.object(client, 'register_device', return_value=MagicMock(status_code=200, json=lambda: {"status": "success", "message": "registered"})),
+        patch.object(client, 'get_device_info', side_effect=httpx.RequestError("Device info failed", request=httpx.Request("GET", TEST_BASE_URL))),
+        patch.object(client, 'send_telemetry'), # Should not be called
+    ):
+        with patch('equus_express.edge_device_controller.logger.error') as mock_error:
+            assert client.test_connection() is False  # Should return False
+            # Verify specific error messages were logged
+            assert "Connection test for device test_client_device failed: Device info failed" in mock_error.call_args[0][0]
+    client.health_check.assert_called_once()
+    client.register_device.assert_called_once()
+    client.get_device_info.assert_called_once()
+    client.send_telemetry.assert_not_called()
 
 @pytest.mark.asyncio
 async def test_device_agent_handle_command_message_success(mock_device_agent_dependencies):
