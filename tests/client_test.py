@@ -125,9 +125,6 @@ def mock_httpx_client():
         mock_response_device_info.json.return_value = {"device_id": TEST_DEVICE_ID}
         mock_response_device_info.raise_for_status.return_value = None
 
-        # Configure side_effect for request to return different mock responses
-        # This list will be consumed sequentially by calls to .request()
-        mock_client_instance.request.side_effect = [
         # Configure side_effect for request to return different mock responses.
         # This list will be consumed sequentially by calls to .request().
         # For test_connection, we'll patch the client's high-level methods directly,
@@ -606,13 +603,6 @@ async def test_device_agent_stop(mock_device_agent_dependencies):
     agent._command_listener_task.assert_awaited_once()
     mock_nats_client.disconnect.assert_awaited_once()
     mock_client.update_status.assert_awaited_with("offline", {"message": "Device agent stopped."})
-
-@pytest.mark.asyncio
-async def test_device_agent_run_telemetry_loop(mock_device_agent_dependencies):
-    """Test telemetry loop sends data at intervals."""
-    mock_client = mock_device_agent_dependencies["mock_client_instance"]
-    mock_asyncio_sleep = mock_device_agent_dependencies["mock_asyncio_sleep"]
-    agent = DeviceAgent(mock_client, mock_device_agent_dependencies["mock_nats_client_instance"])
 
 @pytest.mark.asyncio
 async def test_device_agent_run_telemetry_loop(mock_device_agent_dependencies):
