@@ -180,7 +180,7 @@ def test_api_server_identity_generated_on_startup(setup_teardown_db, mock_api_id
     mock_data["mock_uuid"].uuid4.assert_called_once()
 
     # Assert files were written
-    mock_data["mock_file_open"].assert_any_call(str(mock_data["mock_server_id_path"]), "w")
+    mock_data["mock_file_open"].assert_any_call(mock_data["mock_server_id_path"], "w") # Pass Path object directly, as builtins.open is patched
     mock_data["mock_file_open"].assert_any_call(str(mock_data["mock_private_key_path"]), "wb")
 
     # Assert that app.state was populated
@@ -726,11 +726,11 @@ def test_api_provision_request_missing_fields():
     """Test /api/provision/request with missing required fields."""
     response = client.post("/api/provision/request", json={"public_key": "abc"})
     assert response.status_code == 422
-    assert "device_id" in response.json()["detail"][0]["loc"] # Changed from "requesting_api_id" to "device_id" based on Pydantic error structure
+    assert "requesting_api_id" in response.json()["detail"][0]["loc"] # The Pydantic model uses 'requesting_api_id'
 
     response = client.post("/api/provision/request", json={"requesting_api_id": "abc"})
-    assert response.status_code == 422
-    assert "public_key" in response.json()["detail"][0]["loc"]
+    assert response.status_code == 422 # No change
+    assert "public_key" in response.json()["detail"][0]["loc"] # No change
 
 
 def test_api_provision_request_db_error(mock_db_error):
