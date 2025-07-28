@@ -11,10 +11,7 @@ services:
     networks:
       - web
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.fastapi.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.fastapi.entrypoints=websecure"
-      - "traefik.http.routers.fastapi.tls.certresolver=letsencrypt"
+:wq
 
   traefik:
     image: traefik:v3.0
@@ -53,7 +50,7 @@ services:
       
       # Dashboard
       - --api.dashboard=true
-      - --api.insecure=true
+      - --api.insecure=false
       
       # Logging
       - --log.level=INFO
