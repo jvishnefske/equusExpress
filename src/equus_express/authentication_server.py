@@ -1694,7 +1694,7 @@ async def change_own_password(
     password_data: PasswordChange,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = None,
+    current_user: User = Depends(get_current_user),
 ):
     """Change own password"""
     # Verify old password
