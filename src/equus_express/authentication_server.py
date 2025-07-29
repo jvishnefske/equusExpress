@@ -630,14 +630,22 @@ def hash_password(password: str) -> tuple[str, str]:
         salt=salt.encode("utf-8"),
         iterations=100000,
     )
-    return str(password_hash), salt
+    return password_hash.hex(), salt
 
 
 def verify_password(
     plain_password: str, hashed_password: str, salt: str
 ) -> bool:
     """Verify password with salt"""
-    return pwd_context.verify(plain_password + salt, hashed_password)
+    # Re-calculate the hash with the provided salt and plain password
+    re_hashed_password = hashlib.pbkdf2_hmac(
+        hash_name="sha256",
+        password=plain_password.encode("utf-8"),
+        salt=salt.encode("utf-8"),
+        iterations=100000,
+    ).hex() # Convert to hex string for comparison
+
+    return re_hashed_password == hashed_password
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
