@@ -75,8 +75,168 @@ ALLOWED_ORIGINS = [WEBAUTHN_ORIGIN, "http://127.0.0.1:8000"]
 
 
 class UserNotFoundException(HTTPException):
-    def __init__(self, details="User not found."):
-        super(status_code=status.HTTP_404_NOT_FOUND, details=details)
+    def __init__(self, detail="User not found."):
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+
+
+class RoleNotFoundException(HTTPException):
+    def __init__(self, detail="Role not found."):
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+
+
+class PermissionNotFoundException(HTTPException):
+    def __init__(self, detail="Permission not found."):
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+
+
+class GroupNotFoundException(HTTPException):
+    def __init__(self, detail="Group not found."):
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+
+
+class PasskeyNotFoundException(HTTPException):
+    def __init__(self, detail="Passkey not found for this user."):
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+
+
+class MissingChallengeDataException(HTTPException):
+    def __init__(self, detail="Missing challenge data in response."):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class PasskeyRegistrationFailedException(HTTPException):
+    def __init__(self, detail="Passkey registration failed."):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class PasskeyAuthenticationFailedException(HTTPException):
+    def __init__(self, detail="Passkey authentication failed."):
+        super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
+
+
+class ReplayAttackDetectedException(HTTPException):
+    def __init__(self, detail="Invalid sign count - possible replay attack."):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class InvalidCredentialsException(HTTPException):
+    def __init__(self, detail="Could not validate credentials."):
+        super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail, headers={"WWW-Authenticate": "Bearer"})
+
+
+class IncorrectCredentialsException(HTTPException):
+    def __init__(self, detail="Incorrect username or password."):
+        super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
+
+
+class AccountLockedException(HTTPException):
+    def __init__(self, detail="Account is locked due to too many failed attempts."):
+        super().__init__(status_code=status.HTTP_423_LOCKED, detail=detail)
+
+
+class AccountDisabledException(HTTPException):
+    def __init__(self, detail="Account is disabled."):
+        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+
+class PermissionNotDefinedException(HTTPException):
+    def __init__(self, permission_name: str):
+        super().__init__(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Permission '{permission_name}' not defined.")
+
+
+class ForbiddenException(HTTPException):
+    def __init__(self, detail="Forbidden: You do not have permission to perform this action."):
+        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+
+class SuperAdminCreationForbiddenException(HTTPException):
+    def __init__(self, detail="Super admin can only be created as the first user."):
+        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+
+class UsernameAlreadyRegisteredException(HTTPException):
+    def __init__(self, detail="Username already registered."):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class FrontendFileNotFoundException(HTTPException):
+    def __init__(self, detail="admin_portal_frontend.html not found."):
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+
+
+class RoleNameAlreadyExistsException(HTTPException):
+    def __init__(self, detail="Role name already exists."):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class LastSuperAdminRoleDeletionForbiddenException(HTTPException):
+    def __init__(self, detail="Cannot delete the last 'Super Administrator' role definition or if it's assigned to any user."):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class SelfAccountStatusModificationForbiddenException(HTTPException):
+    def __init__(self, detail="Cannot modify your own account status."):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class SelfDeletionForbiddenException(HTTPException):
+    def __init__(self, detail="Cannot delete your own account."):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class LastSuperAdminDeletionForbiddenException(HTTPException):
+    def __init__(self, detail="Cannot delete the last super administrator."):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class IncorrectCurrentPasswordException(HTTPException):
+    def __init__(self, detail="Current password is incorrect."):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class RoleAlreadyExistsException(HTTPException):
+    def __init__(self, detail="Role already exists."):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class PermissionAlreadyAssignedException(HTTPException):
+    def __init__(self, detail="Permission already assigned to role."):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class RoleAlreadyAssignedToUserException(HTTPException):
+    def __init__(self, detail="Role already assigned to user."):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class LastSuperAdminRoleRemovalForbiddenException(HTTPException):
+    def __init__(self, detail="Cannot remove Super Administrator role from the last super admin."):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class GroupNameAlreadyExistsException(HTTPException):
+    def __init__(self, detail="Group name already exists."):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class GroupAlreadyExistsException(HTTPException):
+    def __init__(self, detail="Group already exists."):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class UserAlreadyAssignedToGroupException(HTTPException):
+    def __init__(self, detail="User already assigned to group."):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class UserNotInGroupException(HTTPException):
+    def __init__(self, detail="User is not in this group."):
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+
+
+class InvalidEmergencyCodeException(HTTPException):
+    def __init__(self, detail="Invalid emergency code."):
+        super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
 
 
 # --- Database Models (SQLAlchemy) ---
@@ -556,25 +716,20 @@ def get_client_ip(request: Request) -> str:
 def get_current_user(
     db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)
 ):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         if username is None:
-            raise credentials_exception
+            raise InvalidCredentialsException()
     except JWTError:
-        raise credentials_exception
+        raise InvalidCredentialsException()
 
     user = db.query(User).filter(User.username == username).first()
     if user is None or user.account_status not in [
         "Active",
         "Locked",
     ]:  # Allow locked accounts to be processed for lockout checks
-        raise credentials_exception
+        raise InvalidCredentialsException()
     return user
 
 
@@ -598,10 +753,7 @@ def has_permission(permission_name: str):
             .first()
         )
         if not required_permission:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Permission '{permission_name}' not defined.",
-            )
+            raise PermissionNotDefinedException(permission_name)
 
         for role_id in role_ids:
             if (
@@ -615,9 +767,8 @@ def has_permission(permission_name: str):
             ):
                 return True
 
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"User does not have '{permission_name}' permission.",
+        raise ForbiddenException(
+            detail=f"User does not have '{permission_name}' permission."
         )
 
     return check_permission
@@ -671,10 +822,7 @@ async def read_root():
     """Serve the static admin portal frontend HTML file."""
     html_file_path = Path(__file__).parent / "admin_portal_frontend.html"
     if not html_file_path.is_file():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="admin_portal_frontend.html not found",
-        )
+        raise FrontendFileNotFoundException()
     return html_file_path.read_text()
 
 
@@ -688,17 +836,11 @@ async def register(
 
     # Only allow super admin creation if no users exist
     if existing_users > 0 and user_data.is_super_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Super admin can only be created as the first user",
-        )
+        raise SuperAdminCreationForbiddenException()
 
     # Check if username already exists
     if db.query(User).filter(User.username == user_data.username).first():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already registered",
-        )
+        raise UsernameAlreadyRegisteredException()
 
     # Hash password with salt
     password_hash, salt = hash_password(user_data.password)
@@ -774,10 +916,7 @@ async def login_password(
             f"Login attempt with non-existent username: {user_credentials.username}",
             client_ip,
         )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-        )
+        raise IncorrectCredentialsException()
 
     # Check if account is locked
     if is_account_locked(user):
@@ -788,10 +927,7 @@ async def login_password(
             "Login attempt on locked account",
             client_ip,
         )
-        raise HTTPException(
-            status_code=status.HTTP_423_LOCKED,
-            detail="Account is locked due to too many failed attempts",
-        )
+        raise AccountLockedException()
 
     # Check if account is disabled
     if user.account_status == "Disabled":
@@ -802,9 +938,7 @@ async def login_password(
             "Login attempt on disabled account",
             client_ip,
         )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled"
-        )
+        raise AccountDisabledException()
 
     # Verify password
     if not verify_password(
@@ -823,10 +957,7 @@ async def login_password(
             f"Invalid password attempt ({user.failed_login_attempts}/{MAX_FAILED_ATTEMPTS})",
             client_ip,
         )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-        )
+        raise IncorrectCredentialsException()
 
     # Successful login
     reset_failed_attempts(db, user)
@@ -862,26 +993,18 @@ async def get_my_passkeys(
                 current_user.passkey_credential_id
             ).decode("latin1")
         }
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="No passkey registered for this user",
-    )
+    raise PasskeyNotFoundException(detail="No passkey registered for this user")
 
 
 @app.delete("/me/passkeys")
 async def delete_my_passkey(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = None,
+    current_user: User = Depends(get_current_user), # Use Depends directly
 ):
-    if current_user is None:
-        current_user = Depends(get_current_user)
     """Delete current user's registered passkey"""
     if not current_user.passkey_credential_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No passkey to delete for this user",
-        )
+        raise PasskeyNotFoundException(detail="No passkey to delete for this user")
 
     credential_id_hex = current_user.passkey_credential_id
     current_user.passkey_credential_id = None
@@ -911,9 +1034,7 @@ async def passkey_register_start(
         db.query(User).filter(User.username == request_data.username).first()
     )
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+        raise UserNotFoundException()
 
     # Generate registration options
     # The `webauthn` library handles its own state internally, for now, we'll
@@ -955,9 +1076,7 @@ async def passkey_register_complete(
         db.query(User).filter(User.username == request_data.username).first()
     )
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+        raise UserNotFoundException()
 
     try:
         # In a real implementation, retrieve the challenge (state) from session or database
@@ -966,10 +1085,7 @@ async def passkey_register_complete(
             "state"
         )
         if not expected_challenge_b64url:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Missing challenge data",
-            )
+            raise MissingChallengeDataException()
 
         verified_credential = verify_registration_response(
             credential=request_data.attestation_response,
@@ -1010,10 +1126,7 @@ async def passkey_register_complete(
             f"Passkey registration failed: {str(e)}",
             get_client_ip(request),
         )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Passkey registration failed: {e}",
-        )
+        raise PasskeyRegistrationFailedException(detail=f"Passkey registration failed: {e}")
 
 
 @app.post("/passkey/authenticate/start")
@@ -1026,18 +1139,17 @@ async def passkey_authenticate_start(
     user = (
         db.query(User).filter(User.username == request_data.username).first()
     )
-    if not user or not user.passkey_credential_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User or passkey not found",
-        )
+    if not user: # Handle user not found separately
+        raise UserNotFoundException()
+    if not user.passkey_credential_id: # Handle passkey not found
+        raise PasskeyNotFoundException()
+
 
     # Check account status
-    if is_account_locked(user) or user.account_status != "Active":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is not accessible",
-        )
+    if is_account_locked(user):
+        raise AccountLockedException()
+    if user.account_status != "Active":
+        raise AccountDisabledException()
 
     # Generate authentication options
     auth_options = generate_authentication_options(
@@ -1088,10 +1200,9 @@ async def passkey_authenticate_complete(
         or not user.passkey_credential_id
         or not user.passkey_public_key
     ):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User or passkey not found",
-        )
+        raise UserNotFoundException() # If user not found
+    if not user.passkey_credential_id or not user.passkey_public_key:
+        raise PasskeyNotFoundException() # If passkey data is missing
 
     try:
         # Retrieve the challenge (state) from the request, sent back by the client.
@@ -1101,10 +1212,7 @@ async def passkey_authenticate_complete(
             "state"
         )
         if not expected_challenge_b64url:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Missing challenge data",
-            )
+            raise MissingChallengeDataException()
 
         verified_authentication = verify_authentication_response(
             credential=request_data.assertion_response,
@@ -1118,10 +1226,7 @@ async def passkey_authenticate_complete(
 
         # Update sign count to prevent replay attacks
         if verified_authentication.new_sign_count <= user.passkey_sign_count:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid sign count - possible replay attack",
-            )
+            raise ReplayAttackDetectedException()
 
         user.passkey_sign_count = verified_authentication.new_sign_count
         user.last_login_at = int(datetime.now().timestamp())
@@ -1158,10 +1263,7 @@ async def passkey_authenticate_complete(
             f"Passkey authentication failed: {str(e)}",
             get_client_ip(request),
         )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Passkey authentication failed",
-        )
+        raise PasskeyAuthenticationFailedException()
 
 
 # --- User Management Endpoints ---
@@ -1231,9 +1333,7 @@ async def update_role(
     """Update role name or description"""
     role = db.query(Role).filter(Role.role_id == role_id).first()
     if not role:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
-        )
+        raise RoleNotFoundException()
 
     old_name = role.role_name
     old_description = role.description
@@ -1248,10 +1348,7 @@ async def update_role(
             )
             .first()
         ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Role name already exists",
-            )
+            raise RoleNameAlreadyExistsException()
         role.role_name = role_update.role_name
 
     if (
@@ -1316,17 +1413,14 @@ async def delete_role(
     """Delete a role"""
     role = db.query(Role).filter(Role.role_id == role_id).first()
     if not role:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
-        )
+        raise RoleNotFoundException()
 
     # Prevent deleting Super Administrator role if it's the only one or still assigned to users
     if role.role_name == ADMINISTRATOR:
         # Check if any user still has this role
         if db.query(UserRole).filter(UserRole.role_id == role.role_id).first():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot delete 'Super Administrator' role if it's assigned to any user or is the only one.",
+            raise LastSuperAdminRoleDeletionForbiddenException(
+                detail="Cannot delete 'Super Administrator' role if it's assigned to any user or is the only one."
             )
         # Check if there are other super admins if it's the last one
         total_super_admins_in_roles_table = (
@@ -1335,9 +1429,8 @@ async def delete_role(
             .count()
         )
         if total_super_admins_in_roles_table <= 1:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot delete the last 'Super Administrator' role definition.",
+            raise LastSuperAdminRoleDeletionForbiddenException(
+                detail="Cannot delete the last 'Super Administrator' role definition."
             )
 
     # Remove all associated UserRole and RolePermission entries
@@ -1367,9 +1460,7 @@ async def get_user(
     """Get specific user by ID"""
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+        raise UserNotFoundException()
 
     # Get user roles
     user_roles = (
@@ -1420,16 +1511,11 @@ async def update_user(
     """Update user information"""
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+        raise UserNotFoundException()
 
     # Prevent self-modification of account status
     if user.user_id == current_user.user_id and user_update.account_status:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot modify your own account status",
-        )
+        raise SelfAccountStatusModificationForbiddenException()
 
     old_values = {
         "username": user.username,
@@ -1446,10 +1532,7 @@ async def update_user(
             .first()
         )
         if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Username already exists",
-            )
+            raise UsernameAlreadyRegisteredException()
         user.username = user_update.username
 
     if user_update.account_status:
@@ -1525,16 +1608,11 @@ async def delete_user(
     """Delete user (soft delete by setting status to Disabled)"""
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+        raise UserNotFoundException()
 
     # Prevent self-deletion
     if user.user_id == current_user.user_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete your own account",
-        )
+        raise SelfDeletionForbiddenException()
 
     # Check if user is the last super admin
     super_admin_role = (
@@ -1557,10 +1635,7 @@ async def delete_user(
                 .count()
             )
             if total_super_admins <= 1:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Cannot delete the last super administrator",
-                )
+                raise LastSuperAdminDeletionForbiddenException()
 
     user.account_status = "Disabled"
     user.updated_at = int(datetime.now().timestamp())
@@ -1589,9 +1664,7 @@ async def admin_change_password(
     """Admin force change user password"""
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+        raise UserNotFoundException()
 
     # Validate password strength
     _ = PasswordChange(
@@ -1623,8 +1696,6 @@ async def change_own_password(
     db: Session = Depends(get_db),
     current_user: User = None,
 ):
-    if current_user is None:
-        current_user = Depends(get_current_user)
     """Change own password"""
     # Verify old password
     if not verify_password(
@@ -1632,10 +1703,7 @@ async def change_own_password(
         current_user.password_hash,
         current_user.password_salt,
     ):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Current password is incorrect",
-        )
+        raise IncorrectCurrentPasswordException()
 
     # Hash new password
     password_hash, salt = hash_password(password_data.new_password)
@@ -1708,10 +1776,7 @@ async def create_role(
     """Create new role"""
     # Check if role already exists
     if db.query(Role).filter(Role.role_name == role_data.role_name).first():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Role already exists",
-        )
+        raise RoleAlreadyExistsException()
 
     role = Role(
         role_name=role_data.role_name, description=role_data.description
@@ -1750,9 +1815,7 @@ async def assign_permission_to_role(
     """Assign permission to role"""
     role = db.query(Role).filter(Role.role_id == role_id).first()
     if not role:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
-        )
+        raise RoleNotFoundException()
 
     permission = (
         db.query(Permission)
@@ -1760,10 +1823,7 @@ async def assign_permission_to_role(
         .first()
     )
     if not permission:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Permission not found",
-        )
+        raise PermissionNotFoundException()
 
     # Check if already assigned
     existing = (
@@ -1776,10 +1836,7 @@ async def assign_permission_to_role(
     )
 
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Permission already assigned to role",
-        )
+        raise PermissionAlreadyAssignedException()
 
     role_perm = RolePermission(
         role_id=role_id, permission_id=permission.permission_id
@@ -1810,9 +1867,7 @@ async def remove_permission_from_role(
     """Remove permission from role"""
     role = db.query(Role).filter(Role.role_id == role_id).first()
     if not role:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
-        )
+        raise RoleNotFoundException()
 
     permission = (
         db.query(Permission)
@@ -1820,10 +1875,7 @@ async def remove_permission_from_role(
         .first()
     )
     if not permission:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Permission not found",
-        )
+        raise PermissionNotFoundException()
 
     role_perm = (
         db.query(RolePermission)
@@ -1835,10 +1887,7 @@ async def remove_permission_from_role(
     )
 
     if not role_perm:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Permission not assigned to role",
-        )
+        raise PermissionNotFoundException(detail="Permission not assigned to role")
 
     db.delete(role_perm)
     db.commit()
@@ -1866,15 +1915,11 @@ async def assign_role_to_user(
     """Assign role to user"""
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+        raise UserNotFoundException()
 
     role = db.query(Role).filter(Role.role_id == role_id).first()
     if not role:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
-        )
+        raise RoleNotFoundException()
 
     # Check if already assigned
     existing = (
@@ -1884,10 +1929,7 @@ async def assign_role_to_user(
     )
 
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Role already assigned to user",
-        )
+        raise RoleAlreadyAssignedToUserException()
 
     user_role = UserRole(user_id=user_id, role_id=role_id)
     db.add(user_role)
@@ -1916,15 +1958,11 @@ async def remove_role_from_user(
     """Remove role from user"""
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+        raise UserNotFoundException()
 
     role = db.query(Role).filter(Role.role_id == role_id).first()
     if not role:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
-        )
+        raise RoleNotFoundException()
 
     # Prevent removing Super Administrator role from last super admin
     if role.role_name == ADMINISTRATOR:
@@ -1932,10 +1970,7 @@ async def remove_role_from_user(
             db.query(UserRole).filter(UserRole.role_id == role_id).count()
         )
         if total_super_admins <= 1:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot remove Super Administrator role from the last super admin",
-            )
+            raise LastSuperAdminRoleRemovalForbiddenException()
 
     user_role = (
         db.query(UserRole)
@@ -1944,10 +1979,7 @@ async def remove_role_from_user(
     )
 
     if not user_role:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Role not assigned to user",
-        )
+        raise RoleNotFoundException(detail="Role not assigned to user")
 
     db.delete(user_role)
     db.commit()
@@ -1996,9 +2028,7 @@ async def update_group(
     """Update group name or description"""
     group = db.query(Group).filter(Group.group_id == group_id).first()
     if not group:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
-        )
+        raise GroupNotFoundException()
 
     old_name = group.group_name
     old_description = group.description
@@ -2013,10 +2043,7 @@ async def update_group(
             )
             .first()
         ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Group name already exists",
-            )
+            raise GroupNameAlreadyExistsException()
         group.group_name = group_update.group_name
 
     if group_update.description is not None:
@@ -2062,9 +2089,7 @@ async def delete_group(
     """Delete a group"""
     group = db.query(Group).filter(Group.group_id == group_id).first()
     if not group:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
-        )
+        raise GroupNotFoundException()
 
     # Remove all associated UserGroup entries
     db.query(UserGroup).filter(UserGroup.group_id == group_id).delete()
@@ -2099,10 +2124,7 @@ async def remove_user_from_group(
     )
 
     if not user_group:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User is not in this group",
-        )
+        raise UserNotInGroupException()
 
     user = db.query(User).filter(User.user_id == user_id).first()
     group = db.query(Group).filter(Group.group_id == group_id).first()
@@ -2134,10 +2156,7 @@ async def create_group(
         .filter(Group.group_name == group_data.group_name)
         .first()
     ):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Group already exists",
-        )
+        raise GroupAlreadyExistsException()
 
     group = Group(
         group_name=group_data.group_name, description=group_data.description
@@ -2175,15 +2194,11 @@ async def assign_user_to_group(
     """Assign user to group"""
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+        raise UserNotFoundException()
 
     group = db.query(Group).filter(Group.group_id == group_id).first()
     if not group:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
-        )
+        raise GroupNotFoundException()
 
     # Check if already assigned
     existing = (
@@ -2193,10 +2208,7 @@ async def assign_user_to_group(
     )
 
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User already assigned to group",
-        )
+        raise UserAlreadyAssignedToGroupException()
 
     user_group = UserGroup(user_id=user_id, group_id=group_id)
     db.add(user_group)
@@ -2223,9 +2235,7 @@ async def get_group_members(
     """Get users who are members of a specific group"""
     group = db.query(Group).filter(Group.group_id == group_id).first()
     if not group:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
-        )
+        raise GroupNotFoundException()
 
     users_in_group = (
         db.query(User)
@@ -2412,10 +2422,7 @@ async def emergency_access(
             "Invalid emergency access attempt",
             get_client_ip(request),
         )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid emergency code",
-        )
+        raise InvalidEmergencyCodeException()
 
     # Create temporary emergency access token (short-lived)
     access_token_expires = timedelta(minutes=10)  # Very short duration
