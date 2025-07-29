@@ -17,6 +17,11 @@ dependencies = [
     "jinja2",
     "httpx",
     "psutil", # Add psutil if it's a runtime dependency for telemetry
+    "webauthn>=2.6.0",
+    "fido2>=0.9.3",
+    "cbor>=1.0.0",
+    "sqlalchemy>=2.0.42",
+    "python-jose>=3.5.0",
 ]
 
 [tool.setuptools.packages.find]

@@ -53,7 +53,7 @@ services:
       
       # Dashboard
       - --api.dashboard=true
-      - --api.insecure=true
+      - --api.insecure=false
       
       # Logging
       - --log.level=INFO

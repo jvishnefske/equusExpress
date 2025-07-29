@@ -2,6 +2,9 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.db
+api_server_id.txt
+*.pem
 
 # C extensions
 *.so

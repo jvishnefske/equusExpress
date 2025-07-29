@@ -19,6 +19,8 @@ from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.backends import default_backend
 
+NOT_AVAILABLE_ = "psutil library is not available."
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,7 +37,7 @@ except ImportError:
 
 class PsutilNotInstalled(NotImplementedError):
     # This class now takes a message, so it's consistent with other exceptions
-    def __init__(self, message="psutil library is not available."):
+    def __init__(self, message=NOT_AVAILABLE_):
         super().__init__(message)
 
 
@@ -461,7 +463,8 @@ class DeviceAgent:
                 raise  # Re-raise for _collect_telemetry to catch and report
         else:
             logger.debug("psutil not available for CPU usage.")
-            raise PsutilNotInstalled("psutil library is not available.")
+            raise PsutilNotInstalled(NOT_AVAILABLE_
+)
 
     def _get_memory_usage(self) -> dict:
         """Get memory usage information"""
@@ -478,7 +481,8 @@ class DeviceAgent:
                 raise
         else:
             logger.debug("psutil not available for memory usage.")
-            raise PsutilNotInstalled("psutil library is not available.")
+            raise PsutilNotInstalled(NOT_AVAILABLE_
+)
 
     def _get_disk_usage(self) -> dict:
         """Get disk usage information"""
@@ -496,7 +500,8 @@ class DeviceAgent:
                 raise
         else:
             logger.debug("psutil not available for disk usage.")
-            raise PsutilNotInstalled("psutil library is not available.")
+            raise PsutilNotInstalled(NOT_AVAILABLE_
+)
 
     def _get_temperature(self) -> float:
         """Get CPU temperature (Raspberry Pi specific)"""
@@ -533,7 +538,7 @@ class DeviceAgent:
 
 def main():
     """Main function for running the secure client"""
-    import sys # Moved import sys here
+    import sys  # Moved import sys here
 
     if len(sys.argv) < 2:
         # Uncovered: Not enough arguments for main
@@ -541,7 +546,9 @@ def main():
             "Usage: python3 secure_client.py <secure_server_url> [device_id]"
         )
         print("Example: python3 secure_client.py https://secure-server:8443")
-        sys.exit(1)  # Uncovered: Exit on missing arguments. Moved this to prevent IndexError.
+        sys.exit(
+            1
+        )  # Uncovered: Exit on missing arguments. Moved this to prevent IndexError.
 
     server_url = sys.argv[1]
     device_id = sys.argv[2] if len(sys.argv) > 2 else None
@@ -575,15 +582,15 @@ def main():
                 agent.stop()
         else:
             logger.error("Failed to start device agent")
-            sys.exit(1) # Uncovered: Exit if agent fails to start
+            sys.exit(1)  # Uncovered: Exit if agent fails to start
 
     except (RuntimeError, ConnectionError, PermissionError) as e:
         # Uncovered: Critical client error (e.g., key initialization failure)
         logger.error(f"A critical client error occurred: {e}")
-        sys.exit(1) # Uncovered: Exit on critical client error
+        sys.exit(1)  # Uncovered: Exit on critical client error
     except Exception as e:
         # Uncovered: Any unexpected error in main process
         logger.exception(
             f"An unexpected error occurred in the main client process: {e}"
         )
-        sys.exit(1) # Uncovered: Exit on unexpected main error
+        sys.exit(1)  # Uncovered: Exit on unexpected main error

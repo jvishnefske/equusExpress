@@ -346,10 +346,14 @@ def register_or_update_device(
 
         conn.commit()
         conn.close()
-        logger.info(f"Device {repr(device_id)} registered/updated with public key.")
+        logger.info(
+            f"Device {repr(device_id)} registered/updated with public key."
+        )
 
     except sqlite3.Error as e:  # Catch specific database errors
-        logger.error(f"Failed to register/update device {repr(device_id)}: {e}")
+        logger.error(
+            f"Failed to register/update device {repr(device_id)}: {e}"
+        )
         raise HTTPException(
             status_code=500, detail=f"Database error during registration: {e}"
         )
@@ -446,7 +450,9 @@ async def register_device(
             "message": "Device registered successfully.",
         }
     except Exception as e:
-        logger.error(f"Error during device registration for {repr(device_id)}: {e}")
+        logger.error(
+            f"Error during device registration for {repr(device_id)}: {e}"
+        )
         raise HTTPException(
             status_code=500, detail=f"Failed to register device: {e}"
         )
@@ -607,7 +613,9 @@ async def update_device_status(
         conn.commit()
         conn.close()
 
-        logger.info(f"Status update from {repr(device_id)}: {status_update.status}")
+        logger.info(
+            f"Status update from {repr(device_id)}: {status_update.status}"
+        )
         return {"status": "success", "message": "Status updated"}
 
     except Exception as e:
