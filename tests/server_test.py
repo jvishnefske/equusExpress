@@ -584,7 +584,8 @@ def test_favicon_not_found():
     assert "Favicon not found" in response.json()["detail"]
 
 
-def test_lifespan_static_file_setup_error():
+@pytest.mark.asyncio
+async def test_lifespan_static_file_setup_error():
     """Test lifespan context manager handles errors during static file setup."""
     # Create a new FastAPI app instance specifically for this test
     # This ensures a fresh lifespan context is triggered with the TestClient.
@@ -603,5 +604,5 @@ def test_lifespan_static_file_setup_error():
         ):
             # Manually call the startup part of the lifespan to trigger the error
             # Pass a mock app state to it to simulate the actual app startup
-            with lifespan(dummy_app):
+            async with lifespan(dummy_app):
                 pass # The yield will not be reached due to the error
