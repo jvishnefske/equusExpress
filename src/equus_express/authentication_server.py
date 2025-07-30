@@ -588,14 +588,17 @@ def create_db_and_tables(db: Session):
         db.refresh(initial_superadmin)
         db.refresh(super_admin_role)
 
-        # Log and save the initial password
-        initial_password_file = "initial_superadmin_password.txt"
-        with open(initial_password_file, "w") as f:
+        # Log and save the initial password to the directory where the SQLite DB is stored
+        db_dir = os.path.dirname(SQLITE_DB_PATH)
+        # Ensure the directory exists before writing the file
+        Path(db_dir).mkdir(parents=True, exist_ok=True)
+        initial_password_file_path = Path(db_dir) / "initial_superadmin_password.txt"
+        with open(initial_password_file_path, "w") as f:
             f.write(f"Initial Super Admin Username: {superadmin_username}\n")
             f.write(f"Initial Super Admin Password: {temp_password}\n")
         logger.info(
             f"Created initial superadmin user '{superadmin_username}' with a randomly generated password. "
-            f"Password logged to '{initial_password_file}' for first-time use. User must change password on first login."
+            f"Password logged to '{initial_password_file_path}' for first-time use. User must change password on first login."
         )
 
 
