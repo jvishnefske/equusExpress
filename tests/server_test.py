@@ -576,18 +576,22 @@ def test_get_device_telemetry_unexpected_error():
     assert "Failed to retrieve telemetry" in response.json()["detail"]
 
 @pytest.mark.skip
-def test_favicon_not_found():
-    """Test favicon endpoint when file is not found."""
-    with patch("equus_express.server.pkg_resources.files") as mock_files:
-        mock_files.return_value.joinpath.return_value.is_dir.return_value = (
-            False
-        )
-        mock_files.return_value.joinpath.return_value.__enter__.side_effect = (
-            FileNotFoundError("Favicon missing")
-        )
-        response = client.get("/favicon.ico")
-        assert response.status_code == 404
-        assert "Favicon not found" in response.json()["detail"]
+async def test_favicon_not_found():
+    """Test favicon endpoint when file is not found.
+    This test needs to create its own client to ensure lifespan is run
+    for proper app.state initialization before mocking.
+    """
+    temp_app = FastAPI(lifespan=app.router.lifespan_context) # Use the same lifespan context
+
+    # Mock Path.exists to simulate the favicon file not being found.
+    # We must patch the method that will be called on the Path object after lifespan setup.
+    with patch("pathlib.Path.exists", return_value=False) as mock_exists:
+        async with TestClient(temp_app) as client_for_test:
+            response = await client_for_test.get("/favicon.ico")
+            assert response.status_code == 404
+            assert "Favicon not found" in response.json()["detail"]
+            # Verify that .exists() was called on the constructed favicon path
+            mock_exists.assert_called_once()
 
 
 @pytest.mark.skip
@@ -603,7 +607,7 @@ async def test_lifespan_static_file_setup_error():
         side_effect=OSError("Temp dir error"),
     ):
         with pytest.raises(
-            RuntimeError, match="Failed to initialize static file serving"
+            RuntimeError, match="Failed to initialize server resources"
         ):
             # Use TestClient as a context manager to ensure lifespan startup is fully executed and errors propagated
             async with TestClient(temp_app):
