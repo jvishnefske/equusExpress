@@ -396,15 +396,20 @@ async def favicon():
         # For simplicity, given static is mounted to `/static`, a browser requesting `/favicon.ico`
         # would typically not hit this endpoint if it's placed within the root of the mounted static path.
         # If it's expected to be served from the top level, we explicitly fetch it.
-        
-        # Access the path used for static files from app.state
-        static_base_path = Path(app.state.static_path)
-        favicon_path = static_base_path / "favicon.ico"
 
-        if not favicon_path.exists():
-            raise HTTPException(status_code=404, detail="Favicon not found")
-            
-        return FileResponse(str(favicon_path))
+        try:
+            # Access the path used for static files from app.state
+            static_base_path = Path(app.state.static_path)
+            favicon_path = static_base_path / "favicon.ico"
+
+            if not favicon_path.exists():
+                raise HTTPException(status_code=404, detail="Favicon not found")
+                
+            return FileResponse(str(favicon_path))
+        except (AttributeError, KeyError) as e:
+            # Catch if app.state.static_path is not yet set or accessible
+            logger.error(f"Static path not initialized for favicon: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Server resources not fully initialized for favicon")
     except Exception as e:
         logger.error(f"Failed to serve favicon.ico: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error serving favicon")
