@@ -3,16 +3,11 @@ import os
 import tempfile
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy import Column, Integer, String, create_engine
-from equus_express.internal.session import SessionLocal, Base, engine, get_db
-
-# Define a simple test model for checking database interaction
-class TestItem(Base):
-    __tablename__ = "test_items"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
+# We will define Base locally in the fixture to ensure it uses the test engine
+# from equus_express.internal.session import SessionLocal, Base, engine, get_db # No longer directly importing Base, engine, SessionLocal here
 
 @pytest.fixture(scope="function")
-def temp_test_db(monkeypatch):
+def temp_test_db(monkeypatch, request): # Added 'request' fixture
     """
     Fixture to create a temporary SQLite database for testing the session module.
     It overrides the DATABASE_URL environment variable and ensures tables are created.
@@ -25,15 +20,20 @@ def temp_test_db(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{temp_db_path}")
 
     # Re-initialize the engine and SessionLocal to pick up the new DATABASE_URL
-    # This is crucial because `engine` and `SessionLocal` are module-level variables
-    # in `equus_express.internal.session`, so they need to be re-created after
-    # the environment variable is changed for each test.
-    # We directly create new instances here for the test context to ensure isolation.
     test_engine = create_engine(f"sqlite:///{temp_db_path}", connect_args={"check_same_thread": False})
     TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
     
-    # Create all tables defined by Base (including TestItem) in the temporary database
-    Base.metadata.create_all(bind=test_engine)
+    # Define a local Base for the test to ensure it's bound to the test_engine
+    TestBase = declarative_base()
+
+    # Define a simple test model for checking database interaction, inheriting from TestBase
+    class TestItem(TestBase):
+        __tablename__ = "test_items"
+        id = Column(Integer, primary_key=True, index=True)
+        name = Column(String, index=True)
+
+    # Create all tables defined by TestBase in the temporary database
+    TestBase.metadata.create_all(bind=test_engine)
 
     # Provide a get_db function that uses the temporary session local
     def get_temp_db():
@@ -43,7 +43,12 @@ def temp_test_db(monkeypatch):
         finally:
             db.close()
 
-    yield get_temp_db # Yield the modified get_db function
+    # Yield the modified get_db function for the test to use
+    yield get_temp_db
+
+    # Teardown: dispose of the engine and remove the temporary database file
+    test_engine.dispose()
+    os.unlink(temp_db_path)
 
     # Teardown: dispose of the engine and remove the temporary database file
     test_engine.dispose()
@@ -61,7 +66,7 @@ def test_get_db_yields_session_and_closes(temp_test_db):
     assert isinstance(db, Session)
     assert db.is_active is True
 
-    # Perform a simple operation to ensure the session is functional
+    # Perform a simple operation to ensure the session is functional, using the locally defined TestItem
     new_item = TestItem(name="Test Item")
     db.add(new_item)
     db.commit()
