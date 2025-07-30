@@ -253,6 +253,9 @@ class User(Base):
     # Account status and lockout
     account_status = Column(String, default="Active", nullable=False)
     last_login_at = Column(Integer)
+    force_password_change = Column(
+        Boolean, default=False, nullable=False
+    )  # New field
     failed_login_attempts = Column(Integer, default=0)
     lockout_until = Column(Integer)
     created_at = Column(
@@ -519,17 +522,12 @@ class PasskeyAuthenticationComplete(BaseModel):
 # --- Database Initialization ---
 def create_db_and_tables(db: Session):
     # This function ensures that roles and permissions are always present within the provided db session.
-    # It does NOT create the initial superadmin user; that's handled by specific setup logic or tests.
+    # It also handles the creation of the initial superadmin if no users exist.
 
     # Create default role if it doesn't exist
-    super_admin_role = (
-        db.query(Role).filter_by(role_name=ADMINISTRATOR).first()
-    )
+    super_admin_role = db.query(Role).filter_by(role_name=ADMINISTRATOR).first()
     if not super_admin_role:
-        super_admin_role = Role(
-            role_name=ADMINISTRATOR,
-            description="Full administrative access.",
-        )
+        super_admin_role = Role(role_name=ADMINISTRATOR, description="Full administrative access.")
         db.add(super_admin_role)
         db.commit()
         db.refresh(super_admin_role)
@@ -538,59 +536,65 @@ def create_db_and_tables(db: Session):
     # Ensure all permissions exist and assign to Super Administrator role
     permissions_to_ensure = [
         ("manage_users", "Ability to create, update, delete users."),
-        (
-            "manage_roles",
-            "Ability to create, update, delete roles and assign permissions to roles.",
-        ),
-        (
-            "manage_groups",
-            "Ability to create, update, delete groups and assign users to groups.",
-        ),
+        ("manage_roles", "Ability to create, update, delete roles and assign permissions to roles."),
+        ("manage_groups", "Ability to create, update, delete groups and assign users to groups."),
         ("view_audit_logs", "Ability to view audit logs."),
         ("assign_roles", "Ability to assign roles to users."),
         ("assign_groups", "Ability to assign groups to users."),
         ("emergency_access", "Emergency access for break-glass scenarios."),
     ]
 
-    existing_permissions = {
-        p.permission_name: p for p in db.query(Permission).all()
-    }
+    existing_permissions = {p.permission_name: p for p in db.query(Permission).all()}
     for perm_name, perm_desc in permissions_to_ensure:
         if perm_name not in existing_permissions:
-            new_perm = Permission(
-                permission_name=perm_name, description=perm_desc
-            )
+            new_perm = Permission(permission_name=perm_name, description=perm_desc)
             db.add(new_perm)
             db.flush()  # Flush to get ID for assignment
-            existing_permissions[perm_name] = (
-                new_perm  # Add to map for immediate use
-            )
+            existing_permissions[perm_name] = new_perm  # Add to map for immediate use
             logger.info(f"Created permission: {perm_name}")
 
         # Assign to Super Administrator role if not already assigned
         perm_obj = existing_permissions[perm_name]
-        if (
-            super_admin_role
-            and not db.query(RolePermission)
-            .filter_by(
-                role_id=super_admin_role.role_id,
-                permission_id=perm_obj.permission_id,
-            )
-            .first()
-        ):
-            db.add(
-                RolePermission(
-                    role_id=super_admin_role.role_id,
-                    permission_id=perm_obj.permission_id,
-                )
-            )
-            logger.info(
-                f"Assigned permission {perm_name} to Super Administrator role."
-            )
+        if super_admin_role and not db.query(RolePermission).filter_by(
+            role_id=super_admin_role.role_id, permission_id=perm_obj.permission_id
+        ).first():
+            db.add(RolePermission(role_id=super_admin_role.role_id, permission_id=perm_obj.permission_id))
+            logger.info(f"Assigned permission {perm_name} to Super Administrator role.")
     db.commit()
-    logger.info(
-        "Ensured default roles and permissions are in place and assigned to Super Administrator."
-    )
+    logger.info("Ensured default roles and permissions are in place and assigned to Super Administrator.")
+
+    # Create initial superadmin user if no users exist
+    if db.query(User).count() == 0:
+        superadmin_username = "superadmin"
+        temp_password = secrets.token_urlsafe(16)  # Generate a random password
+        password_hash, salt = hash_password(temp_password)
+
+        initial_superadmin = User(
+            username=superadmin_username,
+            password_hash=password_hash,
+            password_salt=salt,
+            account_status="Active",
+            force_password_change=True,  # Force password change on first login
+            last_login_at=int(datetime.now().timestamp()), # Set initial login time for consistency
+        )
+        db.add(initial_superadmin)
+        db.flush() # Flush to get user_id
+
+        user_role = UserRole(user_id=initial_superadmin.user_id, role_id=super_admin_role.role_id)
+        db.add(user_role)
+        db.commit()
+        db.refresh(initial_superadmin)
+        db.refresh(super_admin_role)
+
+        # Log and save the initial password
+        initial_password_file = "initial_superadmin_password.txt"
+        with open(initial_password_file, "w") as f:
+            f.write(f"Initial Super Admin Username: {superadmin_username}\n")
+            f.write(f"Initial Super Admin Password: {temp_password}\n")
+        logger.info(
+            f"Created initial superadmin user '{superadmin_username}' with a randomly generated password. "
+            f"Password logged to '{initial_password_file}' for first-time use. User must change password on first login."
+        )
 
 
 def get_db():
@@ -938,6 +942,10 @@ async def login_password(
     # Successful login
     reset_failed_attempts(db, user)
     user.last_login_at = int(datetime.now().timestamp())
+
+    # If force_password_change is true, set it to false after successful initial login
+    if user.force_password_change:
+        user.force_password_change = False # User has logged in with initial password, now they will be prompted to change
     db.commit()
 
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -1686,6 +1694,7 @@ async def change_own_password(
     current_user.password_hash = password_hash
     current_user.password_salt = salt
     current_user.updated_at = int(datetime.now().timestamp())
+    current_user.force_password_change = False  # Password changed, no longer forced
     db.commit()
 
     log_audit_event(
