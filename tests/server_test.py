@@ -606,6 +606,6 @@ def test_lifespan_static_file_setup_error():
             RuntimeError, match="Failed to initialize static file serving"
         ):
             # Use TestClient as a context manager to ensure lifespan startup is fully executed and errors propagated
-            with TestClient(temp_app):
+            async with TestClient(temp_app):
                 # No actual requests needed, just the startup part is tested
                 pass
