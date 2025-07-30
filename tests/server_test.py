@@ -591,7 +591,7 @@ def test_favicon_not_found():
 
 
 @pytest.mark.skip
-def test_lifespan_static_file_setup_error():
+async def test_lifespan_static_file_setup_error():
     """Test lifespan context manager handles errors during static file setup."""
     # Create a new FastAPI app instance specifically for this test
     # This ensures a fresh lifespan context is triggered with the TestClient.
