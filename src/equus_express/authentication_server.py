@@ -19,7 +19,6 @@ from pydantic import BaseModel, Field, validator, field_validator
 from contextlib import asynccontextmanager
 
 from sqlalchemy import (
-    create_engine,
     Column,
     Integer,
     String,
@@ -29,8 +28,6 @@ from sqlalchemy import (
     Boolean,
 )
 from sqlalchemy.orm import (
-    sessionmaker,
-    declarative_base,
     relationship,
     Session,
 )
@@ -46,6 +43,12 @@ from webauthn.helpers.structs import (
     PublicKeyCredentialDescriptor,
 )
 
+# Import SessionLocal, Base, engine, and get_db from the new module
+from equus_express.internal.session import SessionLocal, Base, engine, get_db
+# Import EQUUS_DATA_DIR, Path from internal config if available or redefine locally
+# Assuming EQUUS_DATA_DIR will be centralized in config.py later or managed by the app where needed.
+from pathlib import Path
+
 ADMINISTRATOR = "Super Administrator"
 
 # Configure logging
@@ -59,13 +62,15 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_DURATION_MINUTES = 30
 
-# SQLite Database Configuration
+# SQLite Database Configuration (now defined in equus_express.internal.session.py)
+# Only define EQUUS_DATA_DIR here if it's used *only* for file paths like the initial password file.
+# If it's used to derive DATABASE_URL, that should be handled in session.py.
+# For now, keeping the Path import and definition if it's strictly for local file system ops.
 EQUUS_DATA_DIR_STR = os.getenv("EQUUS_DATA_DIR", "./data")
 EQUUS_DATA_DIR = Path(EQUUS_DATA_DIR_STR)
-DATABASE_URL = f"sqlite:///{EQUUS_DATA_DIR / 'local_admin.db'}"
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+
+# OAuth2 Scheme for token authentication
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login/password")
 
 # OAuth2 Scheme for token authentication
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login/password")
@@ -604,12 +609,6 @@ def create_db_and_tables(db: Session):
         )
 
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 # --- Security Utilities ---
