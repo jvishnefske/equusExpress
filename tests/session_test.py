@@ -1,7 +1,7 @@
 import pytest
 import os
 import tempfile
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy import Column, Integer, String, create_engine
 from equus_express.internal.session import SessionLocal, Base, engine, get_db
 
