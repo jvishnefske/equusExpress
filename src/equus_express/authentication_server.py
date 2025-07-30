@@ -25,6 +25,7 @@ from sqlalchemy import (
     Text,
     BLOB,
     ForeignKey,
+    Boolean,
 )
 from sqlalchemy.orm import (
     sessionmaker,
