@@ -59,7 +59,8 @@ MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_DURATION_MINUTES = 30
 
 # SQLite Database Configuration
-DATABASE_URL = "sqlite:///./local_admin.db"
+SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "./data/local_admin.db")
+DATABASE_URL = f"sqlite:///{SQLITE_DB_PATH}"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -2442,8 +2443,19 @@ if __name__ == "__main__":
     # Set file permissions for the database (Unix/Linux only)
     import stat
 
-    db_file = "./local_admin.db"
-    if os.path.exists(db_file):
-        os.chmod(db_file, stat.S_IRUSR | stat.S_IWUSR)  # Owner read/write only
+    # Extract the file path from the SQLITE_DB_PATH environment variable (or default)
+    # This assumes a path like ./data/local_admin.db or /app/data/local_admin.db
+    if SQLITE_DB_PATH.startswith("./"):
+        db_file_for_chmod = SQLITE_DB_PATH
+    else: # Assume absolute path within container (e.g., /app/data/local_admin.db)
+        db_file_for_chmod = os.path.join(os.getcwd(), SQLITE_DB_PATH)
+
+    # Ensure the directory exists before checking file existence or setting permissions
+    db_dir = os.path.dirname(db_file_for_chmod)
+    if not os.path.exists(db_dir):
+        os.makedirs(db_dir, exist_ok=True)
+
+    if os.path.exists(db_file_for_chmod):
+        os.chmod(db_file_for_chmod, stat.S_IRUSR | stat.S_IWUSR)  # Owner read/write only
 
     uvicorn.run(app, host="0.0.0.0", port=8000)

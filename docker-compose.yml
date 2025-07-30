@@ -4,6 +4,7 @@ services:
     environment:
       - DOMAIN=${DOMAIN}
       - UVICORN_LOG_LEVEL=debug
+      - SQLITE_DB_PATH=/app/data/local_admin.db # Set the path to the database within the mounted volume
     build: .
     restart: unless-stopped
     expose:
