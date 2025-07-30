@@ -575,27 +575,23 @@ def test_get_device_telemetry_unexpected_error():
     assert response.status_code == 500
     assert "Failed to retrieve telemetry" in response.json()["detail"]
 
-@pytest.mark.skip
 def test_favicon_not_found():
     """Test favicon endpoint when file is not found."""
-    with patch("equus_express.server.pkg_resources.files") as mock_files:
-        mock_files.return_value.joinpath.return_value.is_dir.return_value = (
-            False
-        )
-        mock_files.return_value.joinpath.return_value.__enter__.side_effect = (
-            FileNotFoundError("Favicon missing")
-        )
-        response = client.get("/favicon.ico")
-        assert response.status_code == 404
-        assert "Favicon not found" in response.json()["detail"]
+    # Simulate that the favicon file doesn't exist within the static path
+    with patch("pathlib.Path.exists", return_value=False):
+        response = client.get("/favicon.ico") # This now directly checks the FileResponse path
+    assert response.status_code == 404
+    assert "Favicon not found" in response.json()["detail"]
 
 
-@pytest.mark.skip
 def test_lifespan_static_file_setup_error():
     """Test lifespan context manager handles errors during static file setup."""
     # Create a new FastAPI app instance specifically for this test
     # This ensures a fresh lifespan context is triggered with the TestClient.
-    temp_app = FastAPI(lifespan=lifespan)
+    # Create a dummy app, but don't bind lifespan directly to it yet
+    # Instead, we will simulate the lifespan setup directly for error testing
+    dummy_app = FastAPI()
+    dummy_app.state.temp_resource_manager = MagicMock()
 
     # Mock tempfile.TemporaryDirectory to raise an error
     with patch(
@@ -603,9 +599,9 @@ def test_lifespan_static_file_setup_error():
         side_effect=OSError("Temp dir error"),
     ):
         with pytest.raises(
-            RuntimeError, match="Failed to initialize static file serving"
+            RuntimeError, match="Failed to initialize server resources"
         ):
-            # Use TestClient as a context manager to ensure lifespan startup is fully executed and errors propagated
-            with TestClient(temp_app):
-                # No actual requests needed, just the startup part is tested
-                pass
+            # Manually call the startup part of the lifespan to trigger the error
+            # Pass a mock app state to it to simulate the actual app startup
+            with lifespan(dummy_app):
+                pass # The yield will not be reached due to the error

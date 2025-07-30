@@ -1,14 +1,12 @@
 
 services:
-  fastapi:
+  server:
     environment:
       - DOMAIN=${DOMAIN}
       - UVICORN_LOG_LEVEL=debug
       - EQUUS_DATA_DIR=/app/data # Set the path to the data directory within the mounted volume
     build: .
     restart: unless-stopped
-    expose:
-      - 8000
     ports:
       - 8000:8000
     networks:
@@ -17,9 +15,30 @@ services:
       - ./equus-data:/app/data
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.fastapi.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.fastapi.entrypoints=websecure"
-      - "traefik.http.routers.fastapi.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.server.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.server.entrypoints=websecure"
+      - "traefik.http.routers.server.tls.certresolver=letsencrypt"
+
+  authentication_server:
+    environment:
+      - SECRET_KEY=${AUTH_SECRET_KEY} # New env variable needed for auth server
+      - WEBAUTHN_RP_ID=${DOMAIN}
+      - WEBAUTHN_ORIGIN=https://${DOMAIN}
+      - EQUUS_DATA_DIR=/app/data
+    build: .
+    restart: unless-stopped
+    expose:
+      - 8001 # Expose the new port for authentication_server
+    networks:
+      - equus-web
+    volumes:
+      - ./equus-data:/app/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.auth.rule=Host(`auth.${DOMAIN}`)" # Route to auth.yourdomain.com
+      - "traefik.http.routers.auth.entrypoints=websecure"
+      - "traefik.http.routers.auth.tls.certresolver=letsencrypt"
+      - "traefik.http.services.auth.loadbalancer.server.port=8001"
 
 networks:
   equus-web:

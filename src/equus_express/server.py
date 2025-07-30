@@ -362,6 +362,11 @@ async def root(request: Request):
     return request.app.state.templates.TemplateResponse("index.html", {"request": request})
 
 
+@app.get("/admin", response_class=HTMLResponse, include_in_schema=False)
+async def admin_portal(request: Request):
+    return request.app.state.templates.TemplateResponse("admin_portal_frontend.html", {"request": request})
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""

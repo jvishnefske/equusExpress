@@ -804,15 +804,6 @@ app.add_middleware(
 )
 
 
-@app.get("/", response_class=HTMLResponse)
-async def read_root():
-    """Serve the static admin portal frontend HTML file."""
-    html_file_path = Path(__file__).parent / "admin_portal_frontend.html"
-    if not html_file_path.is_file():
-        raise FrontendFileNotFoundException()
-    return html_file_path.read_text()
-
-
 # --- Authentication Endpoints ---
 @app.post("/register", response_model=UserResponse)
 async def register(
@@ -2459,4 +2450,4 @@ if __name__ == "__main__":
     if db_file_path.exists():
         db_file_path.chmod(stat.S_IRUSR | stat.S_IWUSR)  # Owner read/write only
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)
