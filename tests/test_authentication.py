@@ -1,16 +1,15 @@
-import os
 import sys
-import pytest
 import time
+from pathlib import Path
+import shutil # For rmtree
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 # Add the parent directory to the Python path to allow importing secure_admin_server
-sys.path.insert(
-    0, os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-)
+sys.path.insert(0, str(Path(__file__).parent.parent.resolve()))
 
 from equus_express.authentication_server import (
     app,
@@ -25,11 +24,12 @@ from equus_express.authentication_server import (
     create_access_token,
     MAX_FAILED_ATTEMPTS,
     create_db_and_tables,
-    get_db, # Import get_db from the app
+    get_db,  # Import get_db from the app
 )
 
-# Use a test database
-TEST_DATABASE_URL = "sqlite:///./test_local_admin.db"
+# Define the test database path using Path
+TEST_DB_PATH = Path("./test_local_admin.db")
+TEST_DATABASE_URL = f"sqlite:///{TEST_DB_PATH}"
 test_engine = create_engine(
     TEST_DATABASE_URL, connect_args={"check_same_thread": False}
 )
@@ -62,11 +62,20 @@ def client_fixture():
     return TestClient(app)
 
 
-@pytest.fixture(name="db_session")
+@pytest.fixture(name="db_session", autouse=True) # autouse=True to ensure it runs for all tests
 def db_session_fixture():
     """Provides a clean database session for each test."""
-    # Ensure tables are dropped and recreated for each test
-    Base.metadata.drop_all(bind=test_engine)
+    # Ensure the database file is removed before each test
+    if TEST_DB_PATH.exists():
+        TEST_DB_PATH.unlink()
+    # If the data directory exists from authentication_server setup, clean it up too.
+    # This might be specific to how you run tests and main app.
+    # Assuming `authentication_server.py` creates `./data` relative to its run location.
+    # For tests, if `./data` is created, clean it up.
+    test_data_dir = Path("./data")
+    if test_data_dir.exists() and test_data_dir.is_dir():
+        shutil.rmtree(test_data_dir)
+
     Base.metadata.create_all(bind=test_engine)
 
     # Get a session for this fixture to use
@@ -78,7 +87,11 @@ def db_session_fixture():
         yield db
     finally:
         db.close()
-    # No need to drop_all again, fixture teardown handles it if used per-test.
+        # Clean up the database file after each test
+        if TEST_DB_PATH.exists():
+            TEST_DB_PATH.unlink()
+        if test_data_dir.exists() and test_data_dir.is_dir():
+            shutil.rmtree(test_data_dir)
 
 
 @pytest.fixture(name="superadmin_client")

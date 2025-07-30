@@ -1,8 +1,9 @@
 # main.py
 import hashlib
 import logging
-import os
+import os # Keep for os.getenv
 import secrets
+import shutil # For rmtree
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
@@ -59,8 +60,9 @@ MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_DURATION_MINUTES = 30
 
 # SQLite Database Configuration
-EQUUS_DATA_DIR = os.getenv("EQUUS_DATA_DIR", "./data")
-DATABASE_URL = f"sqlite:///{EQUUS_DATA_DIR}/local_admin.db"
+EQUUS_DATA_DIR_STR = os.getenv("EQUUS_DATA_DIR", "./data")
+EQUUS_DATA_DIR = Path(EQUUS_DATA_DIR_STR)
+DATABASE_URL = f"sqlite:///{EQUUS_DATA_DIR / 'local_admin.db'}"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -2448,14 +2450,13 @@ if __name__ == "__main__":
 
     # Use EQUUS_DATA_DIR as the base directory for the database and password file
     # This assumes a path like ./data or /app/data
-    db_dir_for_chmod = EQUUS_DATA_DIR
-    db_file_for_chmod = os.path.join(db_dir_for_chmod, "local_admin.db")
+    db_dir_path = EQUUS_DATA_DIR
+    db_file_path = db_dir_path / "local_admin.db"
 
     # Ensure the directory exists before checking file existence or setting permissions
-    if not os.path.exists(db_dir_for_chmod):
-        os.makedirs(db_dir_for_chmod, exist_ok=True)
+    db_dir_path.mkdir(parents=True, exist_ok=True)
 
-    if os.path.exists(db_file_for_chmod):
-        os.chmod(db_file_for_chmod, stat.S_IRUSR | stat.S_IWUSR)  # Owner read/write only
+    if db_file_path.exists():
+        db_file_path.chmod(stat.S_IRUSR | stat.S_IWUSR)  # Owner read/write only
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
