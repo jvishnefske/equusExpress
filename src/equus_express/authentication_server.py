@@ -59,8 +59,8 @@ MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_DURATION_MINUTES = 30
 
 # SQLite Database Configuration
-SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "./data/local_admin.db")
-DATABASE_URL = f"sqlite:///{SQLITE_DB_PATH}"
+EQUUS_DATA_DIR = os.getenv("EQUUS_DATA_DIR", "./data")
+DATABASE_URL = f"sqlite:///{EQUUS_DATA_DIR}/local_admin.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -589,7 +589,7 @@ def create_db_and_tables(db: Session):
         db.refresh(super_admin_role)
 
         # Log and save the initial password to the directory where the SQLite DB is stored
-        db_dir = os.path.dirname(SQLITE_DB_PATH)
+        db_dir = EQUUS_DATA_DIR
         # Ensure the directory exists before writing the file
         Path(db_dir).mkdir(parents=True, exist_ok=True)
         initial_password_file_path = Path(db_dir) / "initial_superadmin_password.txt"
@@ -2446,17 +2446,14 @@ if __name__ == "__main__":
     # Set file permissions for the database (Unix/Linux only)
     import stat
 
-    # Extract the file path from the SQLITE_DB_PATH environment variable (or default)
-    # This assumes a path like ./data/local_admin.db or /app/data/local_admin.db
-    if SQLITE_DB_PATH.startswith("./"):
-        db_file_for_chmod = SQLITE_DB_PATH
-    else: # Assume absolute path within container (e.g., /app/data/local_admin.db)
-        db_file_for_chmod = os.path.join(os.getcwd(), SQLITE_DB_PATH)
+    # Use EQUUS_DATA_DIR as the base directory for the database and password file
+    # This assumes a path like ./data or /app/data
+    db_dir_for_chmod = EQUUS_DATA_DIR
+    db_file_for_chmod = os.path.join(db_dir_for_chmod, "local_admin.db")
 
     # Ensure the directory exists before checking file existence or setting permissions
-    db_dir = os.path.dirname(db_file_for_chmod)
-    if not os.path.exists(db_dir):
-        os.makedirs(db_dir, exist_ok=True)
+    if not os.path.exists(db_dir_for_chmod):
+        os.makedirs(db_dir_for_chmod, exist_ok=True)
 
     if os.path.exists(db_file_for_chmod):
         os.chmod(db_file_for_chmod, stat.S_IRUSR | stat.S_IWUSR)  # Owner read/write only
