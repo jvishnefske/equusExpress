@@ -10,6 +10,8 @@ services:
       - 8000
     networks:
       - web
+    volumes:
+      - ./equus-data:/app/data
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.fastapi.rule=Host(`${DOMAIN}`)"
