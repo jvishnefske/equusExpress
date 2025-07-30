@@ -15,7 +15,6 @@ sys.path.insert(
 from equus_express.authentication_server import (
     app,
     Base,
-    SessionLocal,
     User,
     Role,
     Permission,
@@ -25,8 +24,8 @@ from equus_express.authentication_server import (
     hash_password,
     create_access_token,
     MAX_FAILED_ATTEMPTS,
-    create_db_and_tables,  # Import create_db_and_tables
-    override_get_db,  # Import override_get_db
+    create_db_and_tables,
+    get_db, # Import get_db from the app
 )
 
 # Use a test database
@@ -39,11 +38,16 @@ TestingSessionLocal = sessionmaker(
 )
 
 # Override the get_db dependency for testing
-import contextlib  # This import should be at the top level
+def override_get_db():
+    try:
+        db = TestingSessionLocal()
+        yield db
+    finally:
+        db.close()
 
-app.dependency_overrides[SessionLocal] = (
-    override_get_db  # Apply override here for tests
-)
+
+# Apply override globally for all tests using this app instance
+app.dependency_overrides[get_db] = override_get_db
 
 
 @pytest.fixture(name="client")

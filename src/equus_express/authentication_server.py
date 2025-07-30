@@ -593,25 +593,6 @@ def create_db_and_tables(db: Session):
     )
 
 
-# Use a test database
-TEST_DATABASE_URL = "sqlite:///./test_local_admin.db"
-test_engine = create_engine(
-    TEST_DATABASE_URL, connect_args={"check_same_thread": False}
-)
-TestingSessionLocal = sessionmaker(
-    autocommit=False, autoflush=False, bind=test_engine
-)
-
-
-# Override the get_db dependency for testing
-def override_get_db():
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
-
-
 def get_db():
     db = SessionLocal()
     try:
@@ -788,24 +769,11 @@ def has_permission(permission_name: str):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handles startup and shutdown events."""
-    # Initialize DB tables and default roles/permissions only if not in a test environment
-    # or if explicitly enabled for tests where it's needed (e.g. for testing create_db_and_tables itself)
-    if os.getenv("APP_ENV") != "test":
-        with SessionLocal() as db:
-            Base.metadata.create_all(
-                bind=engine
-            )  # Ensure tables exist for app startup
-            create_db_and_tables(db)  # Create default roles/permissions
-    else:  # For test environment, ensure tables are created but don't create default users/roles here
+    with SessionLocal() as db:
         Base.metadata.create_all(
-            bind=test_engine
-        )  # Use test_engine for creating tables in test env
-        with (
-            TestingSessionLocal() as db
-        ):  # Use TestingSessionLocal to call create_db_and_tables in test env if needed
-            create_db_and_tables(
-                db
-            )  # Create default roles/permissions in test db
+            bind=engine
+        )  # Ensure tables exist for app startup
+        create_db_and_tables(db)  # Create default roles/permissions
     yield
 
 
