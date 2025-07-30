@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uvicorn
 import ssl
-import os
+import os  # Keep for os.getenv
 import sqlite3
 import json
 from datetime import datetime, timezone
@@ -15,23 +15,15 @@ from pydantic import BaseModel
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 import socket
-from contextlib import asynccontextmanager, ExitStack  # Added ExitStack
-import importlib.resources as pkg_resources  # New import for importlib.resources
-import tempfile  # New import for temporary directory creation
-import shutil  # New import for copying files
+from contextlib import asynccontextmanager, ExitStack
+import importlib.resources as pkg_resources
+import tempfile
+import shutil
+from pathlib import Path # New import for Path
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Get the directory of the current file (server.py)
-current_file_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Navigate up to the project root directory.
-# From 'src/equus_express', go up two levels:
-# '../' (to 'src/')
-# '../' (to 'project_root/')
-PROJECT_ROOT_DIR = os.path.abspath(os.path.join(current_file_dir, "..", ".."))
 
 
 @asynccontextmanager
@@ -43,82 +35,84 @@ async def lifespan(app: FastAPI):
     logger.info("Application starting up...")
     init_secure_db()
 
-    # Use ExitStack to manage the lifecycle of temporary resources (e.g., extracted static files)
+    # Use ExitStack to manage the lifecycle of temporary resources (e.g., extracted static files, templates)
     # This ensures cleanup on application shutdown.
     app.state.temp_resource_manager = ExitStack()
 
     try:
-        # Handle static files: they are now located INSIDE the 'equus_express' package.
-        # We need to provide a file system path to StaticFiles.
-        # If the package is zipped, importlib.resources.files will return a Traversable object
-        # that doesn't point to a direct filesystem path. In this case, we extract to a temp dir.
-
-        # Create a temporary directory that will persist during the app's lifetime
-        # and will be cleaned up by ExitStack on shutdown.
+        # --- Handle Static Files ---
         temp_static_dir = app.state.temp_resource_manager.enter_context(
             tempfile.TemporaryDirectory()
         )
-        app.state.static_path = (
-            temp_static_dir  # Default to temp dir for mounted path
-        )
+        static_files_path = Path(temp_static_dir)
 
-        # Get the Traversable object for the 'static' directory within the 'equus_express' package
-        source_static_dir_resource = pkg_resources.files(
-            "equus_express"
-        ).joinpath("static")
+        source_static_dir_resource = pkg_resources.files("equus_express").joinpath("static")
 
-        # Check if the resource directly points to a directory on the filesystem (e.g., in development mode)
         if source_static_dir_resource.is_dir():
-            # If it's a real directory, just use its path directly
-            app.state.static_path = str(source_static_dir_resource)
+            static_files_path = Path(str(source_static_dir_resource))
             logger.info(
-                f"Mounted static files directly from package directory: {app.state.static_path}"
+                f"Mounted static files directly from package directory: {static_files_path}"
             )
         else:
-            # Uncovered: Static files from package need extraction (e.g., when zipped)
             logger.info(
-                f"Extracting static files from package to temporary directory: {temp_static_dir}"
+                f"Extracting static files from package to temporary directory: {static_files_path}"
             )
-            # Iterate over the contents of the 'static' resource directory and copy them
-            # to the temporary directory.
             for item in source_static_dir_resource.iterdir():
                 with pkg_resources.as_file(item) as item_path_on_disk:
-                    # item_path_on_disk is a concrete path to the extracted file
                     shutil.copy(
                         item_path_on_disk,
-                        os.path.join(temp_static_dir, item.name),
+                        static_files_path / item.name,
                     )
-            logger.info(f"Static files extracted to {app.state.static_path}")
+            logger.info(f"Static files extracted to {static_files_path}")
+
+        app.mount(
+            "/static",
+            StaticFiles(directory=static_files_path),
+            name="static",
+        )
+        app.state.static_path = static_files_path # Store for favicon serving
+
+        # --- Handle Templates ---
+        temp_templates_dir = app.state.temp_resource_manager.enter_context(
+            tempfile.TemporaryDirectory()
+        )
+        templates_path = Path(temp_templates_dir)
+
+        source_templates_dir_resource = pkg_resources.files("equus_express").joinpath("templates")
+
+        if source_templates_dir_resource.is_dir():
+            templates_path = Path(str(source_templates_dir_resource))
+            logger.info(
+                f"Loaded templates directly from package directory: {templates_path}"
+            )
+        else:
+            logger.info(
+                f"Extracting templates from package to temporary directory: {templates_path}"
+            )
+            for item in source_templates_dir_resource.iterdir():
+                with pkg_resources.as_file(item) as item_path_on_disk:
+                    shutil.copy(
+                        item_path_on_disk,
+                        templates_path / item.name,
+                    )
+            logger.info(f"Templates extracted to {templates_path}")
+
+        # Initialize Jinja2Templates with the dynamically determined path
+        app.state.templates = Jinja2Templates(directory=templates_path)
 
     except Exception as e:
-        # Uncovered: General exception during static file setup
-        logger.error(f"Failed to set up static files during startup: {e}")
-        # Re-raise the exception to prevent the application from starting without static files
-        raise RuntimeError(f"Failed to initialize static file serving: {e}")
-
-    # Mount the static directory using the path determined in the lifespan function
-    app.mount(
-        "/static",
-        StaticFiles(
-            directory=app.state.static_path
-        ),  # Use the dynamically determined path
-        name="static",
-    )
+        logger.error(f"Failed to set up static files or templates during startup: {e}", exc_info=True)
+        raise RuntimeError(f"Failed to initialize server resources: {e}")
 
     yield  # This is where your application starts running and serves requests
 
     logger.info("Application shutting down...")
-    app.state.temp_resource_manager.close()  # This will clean up the temporary directory
+    app.state.temp_resource_manager.close()  # This will clean up all temporary directories
     logger.info("Temporary resources cleaned up.")
 
 
 app = FastAPI(title="Secure IoT API Server", lifespan=lifespan)
 security = HTTPBearer()
-
-# Initialize Jinja2Templates (templates directory remains at the project root)
-templates = Jinja2Templates(
-    directory=os.path.join(PROJECT_ROOT_DIR, "templates")
-)
 
 
 # Data models
@@ -365,7 +359,7 @@ def register_or_update_device(
 
 @app.get("/")
 async def root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return request.app.state.templates.TemplateResponse("index.html", {"request": request})
 
 
 @app.get("/health")
@@ -384,20 +378,31 @@ async def favicon():
     This is for browsers that automatically look for /favicon.ico at the root.
     """
     try:
-        # Locate favicon.ico within the 'static' folder inside the 'equus_express' package
-        favicon_resource_path = pkg_resources.files("equus_express").joinpath(
-            "static", "favicon.ico"
-        )
+        # The static files are already mounted at /static, so FastAPI will serve it from there.
+        # This endpoint is just a redirect to ensure browsers find it at the root.
+        # We can directly return a FileResponse pointing to the expected mounted path.
+        # However, to avoid hardcoding the path derived from the mounted dir, it's better
+        # to rely on the static files functionality. A simple redirect is more appropriate
+        # if favicon.ico is explicitly requested at root for a browser.
+        # A more robust way is to just let StaticFiles handle it, by making sure the favicon
+        # is placed at the root of the mounted static directory.
+        # Since it's already in 'static', just ensuring the mount point is correct handles it.
+        # This endpoint can technically just serve the specific file from the mounted path.
+        # For simplicity, given static is mounted to `/static`, a browser requesting `/favicon.ico`
+        # would typically not hit this endpoint if it's placed within the root of the mounted static path.
+        # If it's expected to be served from the top level, we explicitly fetch it.
+        
+        # Access the path used for static files from app.state
+        static_base_path = Path(app.state.static_path)
+        favicon_path = static_base_path / "favicon.ico"
 
-        # Use pkg_resources.as_file() context manager to get a temporary filesystem path
-        # to the resource, which can then be passed to FileResponse.
-        with pkg_resources.as_file(
-            favicon_resource_path
-        ) as favicon_path_on_disk:
-            return FileResponse(str(favicon_path_on_disk))
+        if not favicon_path.exists():
+            raise HTTPException(status_code=404, detail="Favicon not found")
+            
+        return FileResponse(str(favicon_path))
     except Exception as e:
-        logger.error(f"Failed to serve favicon.ico: {e}")
-        raise HTTPException(status_code=404, detail="Favicon not found")
+        logger.error(f"Failed to serve favicon.ico: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error serving favicon")
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
