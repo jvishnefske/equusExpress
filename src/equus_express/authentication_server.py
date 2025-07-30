@@ -1,4 +1,3 @@
-# main.py
 import hashlib
 import logging
 import os # Keep for os.getenv
@@ -10,12 +9,11 @@ from typing import List, Optional
 import uvicorn
 from pathlib import Path
 
-from fastapi import FastAPI, Depends, HTTPException, status, Request
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from pydantic import BaseModel, Field, validator, field_validator
 from contextlib import asynccontextmanager
 
 from sqlalchemy import (
@@ -33,18 +31,69 @@ from sqlalchemy.orm import (
 )
 
 # For WebAuthn (Passkeys)
-from webauthn import (
-    generate_authentication_options,
-    verify_authentication_response,
-    verify_registration_response,
-    base64url_to_bytes,
-)
 from webauthn.helpers.structs import (
     PublicKeyCredentialDescriptor,
 )
 
 # Import SessionLocal, Base, engine, and get_db from the new module
 from equus_express.internal.session import SessionLocal, Base, engine, get_db
+# Import common exceptions and models
+from equus_express.exceptions import (
+    HTTPException,
+    status,
+    UserNotFoundException,
+    RoleNotFoundException,
+    PermissionNotFoundException,
+    GroupNotFoundException,
+    PasskeyNotFoundException,
+    MissingChallengeDataException,
+    PasskeyRegistrationFailedException,
+    PasskeyAuthenticationFailedException,
+    ReplayAttackDetectedException,
+    InvalidCredentialsException,
+    IncorrectCredentialsException,
+    AccountLockedException,
+    AccountDisabledException,
+    PermissionNotDefinedException,
+    ForbiddenException,
+    SuperAdminCreationForbiddenException,
+    UsernameAlreadyRegisteredException,
+    FrontendFileNotFoundException,
+    RoleNameAlreadyExistsException,
+    LastSuperAdminRoleDeletionForbiddenException,
+    SelfAccountStatusModificationForbiddenException,
+    SelfDeletionForbiddenException,
+    LastSuperAdminDeletionForbiddenException,
+    IncorrectCurrentPasswordException,
+    RoleAlreadyExistsException,
+    PermissionAlreadyAssignedException,
+    RoleAlreadyAssignedToUserException,
+    LastSuperAdminRoleRemovalForbiddenException,
+    GroupNameAlreadyExistsException,
+    GroupAlreadyExistsException,
+    UserAlreadyAssignedToGroupException,
+    UserNotInGroupException,
+    InvalidEmergencyCodeException,
+)
+from equus_express.models import (
+    Token,
+    UserCreate,
+    UserLogin,
+    UserUpdate,
+    PasswordChange,
+    UserResponse,
+    RoleCreate,
+    RoleResponse,
+    GroupCreate,
+    GroupResponse,
+    AuditLogResponse,
+    PasskeyRegistrationStart,
+    PasskeyRegistrationComplete,
+    PasskeyAuthenticationStart,
+    PasskeyAuthenticationComplete,
+)
+
+
 # Import EQUUS_DATA_DIR, Path from internal config if available or redefine locally
 # Assuming EQUUS_DATA_DIR will be centralized in config.py later or managed by the app where needed.
 from pathlib import Path
@@ -72,460 +121,12 @@ EQUUS_DATA_DIR = Path(EQUUS_DATA_DIR_STR)
 # OAuth2 Scheme for token authentication
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login/password")
 
-# OAuth2 Scheme for token authentication
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login/password")
-
 # WebAuthn Configuration
 WEBAUTHN_RP_ID = os.getenv("WEBAUTHN_RP_ID", "localhost")
 WEBAUTHN_RP_NAME = "Local Admin Portal"
 # Allow both localhost and 127.0.0.1 for local development
 WEBAUTHN_ORIGIN = os.getenv("WEBAUTHN_ORIGIN", "http://localhost:8000")
 ALLOWED_ORIGINS = [WEBAUTHN_ORIGIN, "http://127.0.0.1:8000"]
-
-
-class UserNotFoundException(HTTPException):
-    def __init__(self, detail="User not found."):
-        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
-
-
-class RoleNotFoundException(HTTPException):
-    def __init__(self, detail="Role not found."):
-        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
-
-
-class PermissionNotFoundException(HTTPException):
-    def __init__(self, detail="Permission not found."):
-        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
-
-
-class GroupNotFoundException(HTTPException):
-    def __init__(self, detail="Group not found."):
-        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
-
-
-class PasskeyNotFoundException(HTTPException):
-    def __init__(self, detail="Passkey not found for this user."):
-        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
-
-
-class MissingChallengeDataException(HTTPException):
-    def __init__(self, detail="Missing challenge data in response."):
-        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-
-
-class PasskeyRegistrationFailedException(HTTPException):
-    def __init__(self, detail="Passkey registration failed."):
-        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-
-
-class PasskeyAuthenticationFailedException(HTTPException):
-    def __init__(self, detail="Passkey authentication failed."):
-        super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
-
-
-class ReplayAttackDetectedException(HTTPException):
-    def __init__(self, detail="Invalid sign count - possible replay attack."):
-        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-
-
-class InvalidCredentialsException(HTTPException):
-    def __init__(self, detail="Could not validate credentials."):
-        super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail, headers={"WWW-Authenticate": "Bearer"})
-
-
-class IncorrectCredentialsException(HTTPException):
-    def __init__(self, detail="Incorrect username or password."):
-        super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
-
-
-class AccountLockedException(HTTPException):
-    def __init__(self, detail="Account is locked due to too many failed attempts."):
-        super().__init__(status_code=status.HTTP_423_LOCKED, detail=detail)
-
-
-class AccountDisabledException(HTTPException):
-    def __init__(self, detail="Account is disabled."):
-        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
-
-
-class PermissionNotDefinedException(HTTPException):
-    def __init__(self, permission_name: str):
-        super().__init__(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Permission '{permission_name}' not defined.")
-
-
-class ForbiddenException(HTTPException):
-    def __init__(self, detail="Forbidden: You do not have permission to perform this action."):
-        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
-
-
-class SuperAdminCreationForbiddenException(HTTPException):
-    def __init__(self, detail="Super admin can only be created as the first user."):
-        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
-
-
-class UsernameAlreadyRegisteredException(HTTPException):
-    def __init__(self, detail="Username already registered."):
-        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-
-
-class FrontendFileNotFoundException(HTTPException):
-    def __init__(self, detail="admin_portal_frontend.html not found."):
-        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
-
-
-class RoleNameAlreadyExistsException(HTTPException):
-    def __init__(self, detail="Role name already exists."):
-        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-
-
-class LastSuperAdminRoleDeletionForbiddenException(HTTPException):
-    def __init__(self, detail="Cannot delete the last 'Super Administrator' role definition or if it's assigned to any user."):
-        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-
-
-class SelfAccountStatusModificationForbiddenException(HTTPException):
-    def __init__(self, detail="Cannot modify your own account status."):
-        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-
-
-class SelfDeletionForbiddenException(HTTPException):
-    def __init__(self, detail="Cannot delete your own account."):
-        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-
-
-class LastSuperAdminDeletionForbiddenException(HTTPException):
-    def __init__(self, detail="Cannot delete the last super administrator."):
-        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-
-
-class IncorrectCurrentPasswordException(HTTPException):
-    def __init__(self, detail="Current password is incorrect."):
-        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-
-
-class RoleAlreadyExistsException(HTTPException):
-    def __init__(self, detail="Role already exists."):
-        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-
-
-class PermissionAlreadyAssignedException(HTTPException):
-    def __init__(self, detail="Permission already assigned to role."):
-        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-
-
-class RoleAlreadyAssignedToUserException(HTTPException):
-    def __init__(self, detail="Role already assigned to user."):
-        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-
-
-class LastSuperAdminRoleRemovalForbiddenException(HTTPException):
-    def __init__(self, detail="Cannot remove Super Administrator role from the last super admin."):
-        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-
-
-class GroupNameAlreadyExistsException(HTTPException):
-    def __init__(self, detail="Group name already exists."):
-        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-
-
-class GroupAlreadyExistsException(HTTPException):
-    def __init__(self, detail="Group already exists."):
-        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-
-
-class UserAlreadyAssignedToGroupException(HTTPException):
-    def __init__(self, detail="User already assigned to group."):
-        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-
-
-class UserNotInGroupException(HTTPException):
-    def __init__(self, detail="User is not in this group."):
-        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
-
-
-class InvalidEmergencyCodeException(HTTPException):
-    def __init__(self, detail="Invalid emergency code."):
-        super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
-
-
-# --- Database Models (SQLAlchemy) ---
-class User(Base):
-    __tablename__ = "Users"
-    user_id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True, nullable=False)
-    password_hash = Column(String)
-    password_salt = Column(String)
-    # Passkey fields
-    passkey_credential_id = Column(BLOB)
-    passkey_public_key = Column(BLOB)
-    passkey_sign_count = Column(Integer, default=0)
-    # Account status and lockout
-    account_status = Column(String, default="Active", nullable=False)
-    last_login_at = Column(Integer)
-    force_password_change = Column(
-        Boolean, default=False, nullable=False
-    )  # New field
-    failed_login_attempts = Column(Integer, default=0)
-    lockout_until = Column(Integer)
-    created_at = Column(
-        Integer, default=lambda: int(datetime.now().timestamp())
-    )
-    updated_at = Column(
-        Integer,
-        default=lambda: int(datetime.now().timestamp()),
-        onupdate=lambda: int(datetime.now().timestamp()),
-    )
-
-    roles = relationship("UserRole", back_populates="user")
-    groups = relationship("UserGroup", back_populates="user")
-    audit_logs = relationship("AuditLog", back_populates="user")
-
-
-class Role(Base):
-    __tablename__ = "Roles"
-    role_id = Column(Integer, primary_key=True, index=True)
-    role_name = Column(String, unique=True, index=True, nullable=False)
-    description = Column(Text)
-    created_at = Column(
-        Integer, default=lambda: int(datetime.now().timestamp())
-    )
-    updated_at = Column(
-        Integer,
-        default=lambda: int(datetime.now().timestamp()),
-        onupdate=lambda: int(datetime.now().timestamp()),
-    )
-
-    user_roles = relationship("UserRole", back_populates="role")
-    role_permissions = relationship("RolePermission", back_populates="role")
-
-
-class Permission(Base):
-    __tablename__ = "Permissions"
-    permission_id = Column(Integer, primary_key=True, index=True)
-    permission_name = Column(String, unique=True, index=True, nullable=False)
-    description = Column(Text)
-    created_at = Column(
-        Integer, default=lambda: int(datetime.now().timestamp())
-    )
-    updated_at = Column(
-        Integer,
-        default=lambda: int(datetime.now().timestamp()),
-        onupdate=lambda: int(datetime.now().timestamp()),
-    )
-
-    role_permissions = relationship(
-        "RolePermission", back_populates="permission"
-    )
-
-
-class RolePermission(Base):
-    __tablename__ = "RoleToPermission"
-    role_id = Column(Integer, ForeignKey("Roles.role_id"), primary_key=True)
-    permission_id = Column(
-        Integer, ForeignKey("Permissions.permission_id"), primary_key=True
-    )
-
-    role = relationship("Role", back_populates="role_permissions")
-    permission = relationship("Permission", back_populates="role_permissions")
-
-
-class UserRole(Base):
-    __tablename__ = "UserRoles"
-    user_id = Column(Integer, ForeignKey("Users.user_id"), primary_key=True)
-    role_id = Column(Integer, ForeignKey("Roles.role_id"), primary_key=True)
-
-    user = relationship("User", back_populates="roles")
-    role = relationship("Role", back_populates="user_roles")
-
-
-class Group(Base):
-    __tablename__ = "Groups"
-    group_id = Column(Integer, primary_key=True, index=True)
-    group_name = Column(String, unique=True, index=True, nullable=False)
-    description = Column(Text)
-    created_at = Column(
-        Integer, default=lambda: int(datetime.now().timestamp())
-    )
-    updated_at = Column(
-        Integer,
-        default=lambda: int(datetime.now().timestamp()),
-        onupdate=lambda: int(datetime.now().timestamp()),
-    )
-
-    user_groups = relationship("UserGroup", back_populates="group")
-
-
-class UserGroup(Base):
-    __tablename__ = "UserGroups"
-    user_id = Column(Integer, ForeignKey("Users.user_id"), primary_key=True)
-    group_id = Column(Integer, ForeignKey("Groups.group_id"), primary_key=True)
-
-    user = relationship("User", back_populates="groups")
-    group = relationship("Group", back_populates="user_groups")
-
-
-class AuditLog(Base):
-    __tablename__ = "AuditLog"
-    log_id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(
-        Integer,
-        ForeignKey("Users.user_id", ondelete="SET NULL"),
-        nullable=True,
-    )
-    event_type = Column(String, nullable=False)
-    event_description = Column(Text, nullable=False)
-    ip_address = Column(String)
-    timestamp = Column(
-        Integer,
-        default=lambda: int(datetime.now().timestamp()),
-        nullable=False,
-    )
-
-    user = relationship("User", back_populates="audit_logs")
-
-
-# --- Pydantic Models ---
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-
-class UserCreate(BaseModel):
-    username: str = Field(
-        ..., min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_-]+$"
-    )
-    password: str = Field(..., min_length=8)
-    is_super_admin: bool = False
-
-    @field_validator("password")
-    def validate_password(cls, v):
-        # Aligning with Pydantic's default validation messages or providing custom ones
-        # For simplicity, let's make them more specific or match Pydantic for tests.
-        # Pydantic's Field(min_length=8) already provides a default message.
-        # Adding custom messages here for consistency and clearer feedback.
-        if len(v) < 8:
-            raise ValueError("String should have at least 8 characters")
-        if not any(c.isupper() for c in v):
-            raise ValueError(
-                "Password must contain at least one uppercase letter"
-            )
-        if not any(c.islower() for c in v):
-            raise ValueError(
-                "Password must contain at least one lowercase letter"
-            )
-        if not any(c.isdigit() for c in v):
-            raise ValueError("Password must contain at least one digit")
-        if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in v):
-            raise ValueError(
-                "Password must contain at least one special character"
-            )
-        return v
-
-
-class UserLogin(BaseModel):
-    username: str
-    password: str
-
-
-class UserUpdate(BaseModel):
-    username: Optional[str] = Field(
-        None, min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_-]+$"
-    )
-    account_status: Optional[str] = Field(
-        None, pattern=r"^(Active|Disabled|Locked)$"
-    )
-
-
-class PasswordChange(BaseModel):
-    old_password: str
-    new_password: str = Field(..., min_length=8)
-
-    @field_validator("new_password")
-    def validate_password(cls, v):
-        if len(v) < 8:
-            raise ValueError("String should have at least 8 characters")
-        if not any(c.isupper() for c in v):
-            raise ValueError(
-                "Password must contain at least one uppercase letter"
-            )
-        if not any(c.islower() for c in v):
-            raise ValueError(
-                "Password must contain at least one lowercase letter"
-            )
-        if not any(c.isdigit() for c in v):
-            raise ValueError("Password must contain at least one digit")
-        if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in v):
-            raise ValueError(
-                "Password must contain at least one special character"
-            )
-        return v
-
-
-class UserResponse(BaseModel):
-    user_id: int
-    username: str
-    account_status: str
-    last_login_at: Optional[int]
-    created_at: int
-    updated_at: int
-    roles: List[str] = []
-    groups: List[str] = []
-    passkey_credential_id: Optional[str] = None  # Base64URL encoded
-
-
-class RoleCreate(BaseModel):
-    role_name: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = None
-
-
-class RoleResponse(BaseModel):
-    role_id: int
-    role_name: str
-    description: Optional[str]
-    created_at: int
-    updated_at: int
-    permissions: List[str] = []
-
-
-class GroupCreate(BaseModel):
-    group_name: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = None
-
-
-class GroupResponse(BaseModel):
-    group_id: int
-    group_name: str
-    description: Optional[str]
-    created_at: int
-    updated_at: int
-
-
-class AuditLogResponse(BaseModel):
-    log_id: int
-    user_id: Optional[int]
-    username: Optional[str]
-    event_type: str
-    event_description: str
-    ip_address: Optional[str]
-    timestamp: int
-
-
-class PasskeyRegistrationStart(BaseModel):
-    username: str
-
-
-class PasskeyRegistrationComplete(BaseModel):
-    username: str
-    attestation_response: dict
-
-
-class PasskeyAuthenticationStart(BaseModel):
-    username: str
-
-
-class PasskeyAuthenticationComplete(BaseModel):
-    username: str
-    assertion_response: dict
 
 
 # --- Database Initialization ---
