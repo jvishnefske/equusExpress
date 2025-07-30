@@ -50,6 +50,7 @@ services:
 networks:
   equus-web:
     driver: bridge
+    name: equus-web
 
 volumes:
   traefik-data:
