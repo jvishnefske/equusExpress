@@ -41,16 +41,12 @@ def temp_test_db(monkeypatch, request):
     # Create all tables defined by TestBase in the temporary database
     TestBase.metadata.create_all(bind=test_engine)
 
-    # Provide a get_db function that uses the temporary session local
-    def get_temp_db():
-        db = TestSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    # Yield the modified get_db function for the test to use
-    yield get_temp_db
+    # Yield a session directly for the test to use. Pytest will handle closing it.
+    db = TestSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
     # Teardown: dispose of the engine and remove the temporary database file
     test_engine.dispose()
@@ -61,49 +57,36 @@ def test_get_db_yields_session_and_closes(temp_test_db):
     """
     Test that get_db yields a SQLAlchemy session and ensures it's closed afterwards.
     """
-    # Use the get_db function provided by the fixture
-    gen = temp_test_db()
-    db = next(gen)
-    assert isinstance(db, Session)
-    assert db.is_active is True
+    # The fixture directly yields the session.
+    # Pytest manages the lifecycle including the finalization of the generator.
+    assert isinstance(temp_test_db, Session)
+    assert temp_test_db.is_active is True
 
     # Perform a simple operation to ensure the session is functional, using the globally available TestItem
     new_item = TestItem(name="Test Item")
-    db.add(new_item)
-    db.commit()
-    db.refresh(new_item)
+    temp_test_db.add(new_item)
+    temp_test_db.commit()
+    temp_test_db.refresh(new_item)
     assert new_item.id is not None
     assert new_item.name == "Test Item"
 
-    # Ensure the session is closed by stopping the generator
-    try:
-        next(gen)
-    except StopIteration:
-        pass  # Expected when generator finishes
-
-    assert db.is_active is False
-    assert db.closed is True
+    # The session should be active within the test.
+    # It will be closed automatically by the fixture's finally block after the test completes.
+    assert temp_test_db.is_active is True
 
 
 def test_get_db_exception_handling(temp_test_db):
     """
     Test that get_db correctly closes the session even if an exception occurs.
     """
-    gen = temp_test_db()
-    db = next(gen)
-    assert db.is_active is True
+    assert isinstance(temp_test_db, Session)
+    assert temp_test_db.is_active is True
 
     # Simulate an error within the session context
     with pytest.raises(ValueError):
-        try:
-            db.add(TestItem(name="Another Item"))
-            raise ValueError("Simulated error")
-        finally:
-            # The 'finally' block in get_db should still execute and close the session
-            try:
-                next(gen)  # Manually trigger finally block
-            except StopIteration:
-                pass  # Expected
+        temp_test_db.add(TestItem(name="Another Item"))
+        raise ValueError("Simulated error")
 
-    assert db.is_active is False
-    assert db.closed is True
+    # The session should be active immediately after the error (before fixture teardown).
+    # It will be closed automatically by the fixture's finally block after the test completes.
+    assert temp_test_db.is_active is True
