@@ -602,6 +602,9 @@
                 <button id="logoutBtn" class="logout-btn">Logout</button>
             </div>
         </div>
+        <div id="debugTokenInfo" style="background: #fff3e0; color: #e65100; padding: 5px 20px; font-size: 12px; border-bottom: 1px solid #ffcc80; display: none;">
+            Debug: Token Status: <span id="tokenStatus">N/A</span>
+        </div>
 
         <div class="nav-tabs">
             <button class="nav-tab active" data-tab="dashboard">Dashboard</button>
@@ -1040,15 +1043,18 @@
                     const data = await response.json();
                     currentToken = data.access_token;
                     localStorage.setItem('adminToken', currentToken);
+                    updateDebugTokenInfo(); // Update debug info after successful login
                     showAdminPanel();
                 } else {
                     const errorData = await response.json(); // Try to parse error as JSON
                     showAlert('loginAlert', errorData.detail || 'Login failed', 'error');
                     console.error('Login failed response:', response.status, errorData);
+                    updateDebugTokenInfo(); // Update debug info on login failure
                 }
             } catch (error) {
                 console.error('Network or parsing error during login:', error);
                 showAlert('loginAlert', 'Network error. Please try again. Check console for details.', 'error');
+                updateDebugTokenInfo(); // Update debug info on network error
             } finally {
                 showLoading('loginLoading', false);
             }
@@ -1122,18 +1128,33 @@
             currentToken = null;
             currentUserData = null;
             localStorage.removeItem('adminToken');
+            updateDebugTokenInfo(); // Update debug info on logout
             showLoginScreen();
         }
 
         // UI functions
+        function updateDebugTokenInfo() {
+            const tokenStatusElement = document.getElementById('tokenStatus');
+            if (currentToken) {
+                tokenStatusElement.textContent = `Present (Length: ${currentToken.length}, First 10: ${currentToken.substring(0, 10)}...)`;
+                tokenStatusElement.style.color = '#2e7d32'; // Green for present
+            } else {
+                tokenStatusElement.textContent = 'Not Present';
+                tokenStatusElement.style.color = '#d32f2f'; // Red for not present
+            }
+        }
+
         function showLoginScreen() {
             document.getElementById('loginScreen').style.display = 'flex';
             document.getElementById('adminPanel').style.display = 'none';
+            document.getElementById('debugTokenInfo').style.display = 'none'; // Hide debug info on login screen
         }
 
         function showAdminPanel() {
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('adminPanel').style.display = 'block';
+            document.getElementById('debugTokenInfo').style.display = 'block'; // Show debug info on admin panel
+            updateDebugTokenInfo(); // Update debug info when showing admin panel
             loadCurrentUser();
             loadDashboardData();
         }
