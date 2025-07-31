@@ -2441,6 +2441,11 @@ minimatch@^9.0.4:
   dependencies:
     brace-expansion "^2.0.1"
 
+monaco-editor@^0.52.2:
+  version "0.52.2"
+  resolved "https://registry.yarnpkg.com/monaco-editor/-/monaco-editor-0.52.2.tgz#53c75a6fcc6802684e99fd1b2700299857002205"
+  integrity sha512-GEQWEZmfkOGLdd3XK8ryrfWz3AIP8YymVXiPHEdewrUq7mh0qrKrfHLNCXcbB6sTnMLnOZ3ztSiKcciFUkIJwQ==
+
 monaco@^1.201704190613.0:
   version "1.201704190613.0"
   resolved "https://registry.yarnpkg.com/monaco/-/monaco-1.201704190613.0.tgz#45196e25c020c7d102219149772ce3864be04a1c"

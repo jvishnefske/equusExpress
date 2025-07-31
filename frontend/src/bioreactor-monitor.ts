@@ -43,7 +43,7 @@ export function setupBioreactorMonitor(natsService: NatsSignalsService, parentEl
             <span class="value" id="ph-value">N/A</span>
           </div>
           <div class="data-item">
-            <span class="label">Dissolved O₂</span>
+            <span class="label">CarbonDioxide PPM</span>
             <span class="value" id="do-value">N/A</span>
           </div>
         </div>

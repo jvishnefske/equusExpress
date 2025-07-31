@@ -323,3 +323,8 @@ body {
   border-radius: 4px;
   font-size: 0.85rem;
 }
+
+/* blockly */
+div.blocklyToolboxCategoryContainer{
+   color: #111
+}

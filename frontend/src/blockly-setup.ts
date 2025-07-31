@@ -447,7 +447,7 @@ export function configureBlockly(model: PhysicalModel, updateCodeEditorCallback:
     // Listen for changes in the Blockly workspace and update the Monaco editor
     workspace.addChangeListener((event: Blockly.Events.Abstract) => {
         // Only update code on relevant events (e.g., block creation, deletion, movement, change)
-        if (event.is} {
+        if (true) {
             const code = javascriptGenerator.workspaceToCode(workspace);
             updateCodeEditorCallback(code);
         }

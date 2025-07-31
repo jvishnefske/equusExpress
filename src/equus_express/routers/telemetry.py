@@ -1,3 +1,5 @@
+import importlib
+
 from fastapi import HTTPException, Depends, Request, APIRouter
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.security import HTTPBearer
@@ -262,7 +264,7 @@ def register_or_update_device(
         )
 
 
-@router.get("/api")
+@router.get("/admin")
 async def root(request: Request):
     return request.app.state.templates.TemplateResponse("index.html", {"request": request})
 
@@ -314,10 +316,12 @@ async def favicon(request: Request):
         logger.error(f"Failed to serve favicon.ico: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error serving favicon")
 
+html_path = importlib.resources.files("equus_express.dashboard").joinpath("index.html")
 
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
     """Simple dashboard to display device telemetry."""
+    html_path = importlib.resources.files("equus_express.dashboard").joinpath("index.html")
     html_content = """
     <!DOCTYPE html>
     <html>
@@ -334,7 +338,8 @@ async def dashboard():
     </body>
     </html>
     """
-    return HTMLResponse(content=html_content)
+    # return HTMLResponse(content=html_content)
+    return FileResponse(str(html_path), media_type="text/html")
 
 
 @router.post("/api/register")

@@ -100,6 +100,9 @@ async def combined_lifespan(app: FastAPI):
     app.state.temp_resource_manager.close()  # This will clean up all temporary directories
     logger.info("Temporary resources cleaned up.")
 
+    # static route for dashboard
+    node_dashboard_files_path = pkg_resources.files("equus_express.dashboard")
+    app.mount("/dashboard", StaticFiles(directory=str(node_dashboard_files_path)), name="IIoT dashboard")
 
 app = FastAPI(title="Secure IoT API Server", lifespan=combined_lifespan)
 app.include_router(authentication.router)
