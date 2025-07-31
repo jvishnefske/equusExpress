@@ -1,10 +1,7 @@
-from fastapi import FastAPI, HTTPException, Depends, Request, APIRouter
+from fastapi import HTTPException, Depends, Request, APIRouter
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.security import HTTPBearer
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-import uvicorn
-import ssl
+from pathlib import Path # New import for Path
 import os  # Keep for os.getenv
 import sqlite3
 import json
@@ -14,104 +11,10 @@ import logging
 from pydantic import BaseModel
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
-import socket
-from contextlib import asynccontextmanager, ExitStack
-import importlib.resources as pkg_resources
-import tempfile
-import shutil
-from pathlib import Path # New import for Path
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Handles startup and shutdown events for the application.
-    Initializes the database on startup and sets up static file serving.
-    """
-    logger.info("Application starting up...")
-    init_secure_db()
-
-    # Use ExitStack to manage the lifecycle of temporary resources (e.g., extracted static files, templates)
-    # This ensures cleanup on application shutdown.
-    app.state.temp_resource_manager = ExitStack()
-
-    try:
-        # --- Handle Static Files ---
-        temp_static_dir = app.state.temp_resource_manager.enter_context(
-            tempfile.TemporaryDirectory()
-        )
-        static_files_path = Path(temp_static_dir)
-
-        source_static_dir_resource = pkg_resources.files("equus_express").joinpath("static")
-
-        if source_static_dir_resource.is_dir():
-            static_files_path = Path(str(source_static_dir_resource))
-            logger.info(
-                f"Mounted static files directly from package directory: {static_files_path}"
-            )
-        else:
-            logger.info(
-                f"Extracting static files from package to temporary directory: {static_files_path}"
-            )
-            for item in source_static_dir_resource.iterdir():
-                with pkg_resources.as_file(item) as item_path_on_disk:
-                    shutil.copy(
-                        item_path_on_disk,
-                        static_files_path / item.name,
-                    )
-            logger.info(f"Static files extracted to {static_files_path}")
-
-        # Note: router.mount affects the router, not app.state directly.
-        # This setup assumes the router is ultimately mounted on the app.
-        # The 'app' parameter to lifespan is the FastAPI instance, which is correct here.
-        router.mount(
-            "/static",
-            StaticFiles(directory=static_files_path),
-            name="static",
-        )
-        app.state.static_path = static_files_path # Store for favicon serving
-
-        # --- Handle Templates ---
-        temp_templates_dir = app.state.temp_resource_manager.enter_context(
-            tempfile.TemporaryDirectory()
-        )
-        templates_path = Path(temp_templates_dir)
-
-        source_templates_dir_resource = pkg_resources.files("equus_express").joinpath("templates")
-
-        if source_templates_dir_resource.is_dir():
-            templates_path = Path(str(source_templates_dir_resource))
-            logger.info(
-                f"Loaded templates directly from package directory: {templates_path}"
-            )
-        else:
-            logger.info(
-                f"Extracting templates from package to temporary directory: {templates_path}"
-            )
-            for item in source_templates_dir_resource.iterdir():
-                with pkg_resources.as_file(item) as item_path_on_disk:
-                    shutil.copy(
-                        item_path_on_disk,
-                        templates_path / item.name,
-                    )
-            logger.info(f"Templates extracted to {templates_path}")
-
-        # Initialize Jinja2Templates with the dynamically determined path
-        app.state.templates = Jinja2Templates(directory=templates_path)
-
-    except Exception as e:
-        logger.error(f"Failed to set up static files or templates during startup: {e}", exc_info=True)
-        raise RuntimeError(f"Failed to initialize server resources: {e}")
-
-    yield  # This is where your application starts running and serves requests
-
-    logger.info("Application shutting down...")
-    app.state.temp_resource_manager.close()  # This will clean up all temporary directories
-    logger.info("Temporary resources cleaned up.")
 
 
 security = HTTPBearer()
