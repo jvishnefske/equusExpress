@@ -3,11 +3,13 @@ import importlib
 import logging
 import os # Keep for os.getenv
 import secrets
+from datetime import datetime, timedelta, timezone
+from typing import Optional, List, Annotated
 
 
 from fastapi import Depends, Request, APIRouter, HTTPException, status
 from fastapi.responses import HTMLResponse
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 
 from sqlalchemy import (
