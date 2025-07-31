@@ -73,7 +73,6 @@ from equus_express.models import (
     User,
     Token,
     UserCreate,
-    UserLogin,
     UserUpdate,
     PasswordChange,
     UserResponse,
@@ -473,30 +472,28 @@ async def register(
 
 @router.post("/login/password", response_model=Token)
 async def login_password(
-    user_credentials: UserLogin,
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     request: Request,
     db: Session = Depends(get_db),
 ):
     """Login with username and password"""
-    logger.info(f"Login attempt for user: {user_credentials.username}, Password: {user_credentials.password}")
-    logger.debug(f"Received UserLogin data: username={user_credentials.username}, password={user_credentials.password}")
+    logger.info(f"Login attempt for user: {form_data.username}")
+    logger.debug(f"Received OAuth2PasswordRequestForm data: username={form_data.username}, password=********")
 
     user = (
         db.query(User)
-        .filter(User.username == user_credentials.username)
+        .filter(User.username == form_data.username)
         .first()
     )
     client_ip = get_client_ip(request)
 
     if not user:
-        logger.debug(f"User not found: {user_credentials.username}")
-
-    if not user:
+        logger.debug(f"User not found: {form_data.username}")
         log_audit_event(
             db,
             None,
             "LOGIN_FAILED",
-            f"Login attempt with non-existent username: {user_credentials.username}",
+            f"Login attempt with non-existent username: {form_data.username}",
             client_ip,
         )
         raise IncorrectCredentialsException()
@@ -530,7 +527,7 @@ async def login_password(
     # Verify password
     logger.debug(f"Verifying password for user: {user.username}")
     if not verify_password(
-        user_credentials.password, user.password_hash, user.password_salt
+        form_data.password, user.password_hash, user.password_salt
     ):
         logger.debug(f"Password verification failed for {user.username}. Incrementing failed attempts.")
         user.failed_login_attempts += 1
