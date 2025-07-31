@@ -26,10 +26,11 @@ yarn build
 cd ..
 
 # Ensure the destination directory exists
-mkdir -p src/equus_express/src/dist
+mkdir -p src/equus_express/dist
 
 # Copy the build output to the desired location
 echo "Copying frontend/dist to src/equus_express/src/dist..."
-cp -R frontend/dist/* src/equus_express/src/dist/
+cp -R frontend/dist/* src/equus_express/dist/
+touch src/equus_express/dist/__init__
 
 echo "Frontend build and copy complete!"

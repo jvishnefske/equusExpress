@@ -5,6 +5,7 @@ __pycache__/
 *.db
 api_server_id.txt
 *.pem
+.yarn
 
 # C extensions
 *.so
