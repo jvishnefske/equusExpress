@@ -37,11 +37,11 @@ async def lifespan(app: FastAPI):
 
     # Use ExitStack to manage the lifecycle of temporary resources (e.g., extracted static files, templates)
     # This ensures cleanup on application shutdown.
-    router.state.temp_resource_manager = ExitStack()
+    app.state.temp_resource_manager = ExitStack()
 
     try:
         # --- Handle Static Files ---
-        temp_static_dir = router.state.temp_resource_manager.enter_context(
+        temp_static_dir = app.state.temp_resource_manager.enter_context(
             tempfile.TemporaryDirectory()
         )
         static_files_path = Path(temp_static_dir)
@@ -65,15 +65,18 @@ async def lifespan(app: FastAPI):
                     )
             logger.info(f"Static files extracted to {static_files_path}")
 
+        # Note: router.mount affects the router, not app.state directly.
+        # This setup assumes the router is ultimately mounted on the app.
+        # The 'app' parameter to lifespan is the FastAPI instance, which is correct here.
         router.mount(
             "/static",
             StaticFiles(directory=static_files_path),
             name="static",
         )
-        router.state.static_path = static_files_path # Store for favicon serving
+        app.state.static_path = static_files_path # Store for favicon serving
 
         # --- Handle Templates ---
-        temp_templates_dir = router.state.temp_resource_manager.enter_context(
+        temp_templates_dir = app.state.temp_resource_manager.enter_context(
             tempfile.TemporaryDirectory()
         )
         templates_path = Path(temp_templates_dir)
@@ -98,7 +101,7 @@ async def lifespan(app: FastAPI):
             logger.info(f"Templates extracted to {templates_path}")
 
         # Initialize Jinja2Templates with the dynamically determined path
-        router.state.templates = Jinja2Templates(directory=templates_path)
+        app.state.templates = Jinja2Templates(directory=templates_path)
 
     except Exception as e:
         logger.error(f"Failed to set up static files or templates during startup: {e}", exc_info=True)
@@ -107,7 +110,7 @@ async def lifespan(app: FastAPI):
     yield  # This is where your application starts running and serves requests
 
     logger.info("Application shutting down...")
-    router.state.temp_resource_manager.close()  # This will clean up all temporary directories
+    app.state.temp_resource_manager.close()  # This will clean up all temporary directories
     logger.info("Temporary resources cleaned up.")
 
 
@@ -392,16 +395,16 @@ async def favicon():
         # If it's expected to be served from the top level, we explicitly fetch it.
 
         try:
-            # Access the path used for static files from router.state
-            static_base_path = Path(router.state.static_path)
+            # Access the path used for static files from app.state
+            static_base_path = Path(request.app.state.static_path)
             favicon_path = static_base_path / "favicon.ico"
 
             if not favicon_path.exists():
                 raise HTTPException(status_code=404, detail="Favicon not found")
-                
+
             return FileResponse(str(favicon_path))
         except (AttributeError, KeyError) as e:
-            # Catch if router.state.static_path is not yet set or accessible
+            # Catch if app.state.static_path is not yet set or accessible
             logger.error(f"Static path not initialized for favicon: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Server resources not fully initialized for favicon")
     except Exception as e:
