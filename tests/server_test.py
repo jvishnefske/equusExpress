@@ -2,8 +2,8 @@ import os
 import sqlite3
 import pytest
 from fastapi.testclient import TestClient
+from equus_express.main import app
 from equus_express.routers.telemetry import (
-    app,
     init_secure_db,
     lifespan,
 )  # Import lifespan
