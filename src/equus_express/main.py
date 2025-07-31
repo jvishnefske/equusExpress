@@ -111,11 +111,7 @@ app.add_middleware(
     allow_origins=authentication.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=[
-        "*",
-        "Content-Type",
-        "Authorization",
-    ],  # Explicitly allow Content-Type and Authorization headers
+    allow_headers=["*", "Content-Type", "Authorization"],
 )
 
 if __name__ == "__main__":
