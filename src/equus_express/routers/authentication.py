@@ -5,12 +5,10 @@ import os # Keep for os.getenv
 import secrets
 
 
-from fastapi import FastAPI, Depends, Request, APIRouter
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Depends, Request, APIRouter
 from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from contextlib import asynccontextmanager
 
 from sqlalchemy import (
     Column,
