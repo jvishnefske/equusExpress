@@ -1,8 +1,10 @@
 import hashlib
+import importlib
 import logging
 import os # Keep for os.getenv
 import secrets
 import shutil # For rmtree
+import sys
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
@@ -403,7 +405,8 @@ def has_permission(permission_name: str):
 @router.get("/", response_class=HTMLResponse)
 async def read_root():
     """Serve the static admin portal frontend HTML file."""
-    html_file_path = Path(__file__).parent / "admin_portal_frontend.html"
+    html_file_path = (importlib.resources.files("equus_express").joinpath("templates")
+                                     / "admin_portal_frontend.html")
     if not html_file_path.is_file():
         raise FrontendFileNotFoundException()
     return html_file_path.read_text()
