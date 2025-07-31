@@ -11,8 +11,8 @@ from sqlalchemy.orm import sessionmaker
 # Add the parent directory to the Python path to allow importing secure_admin_server
 sys.path.insert(0, str(Path(__file__).parent.parent.resolve()))
 
-from equus_express.authentication_server import (
-    app,
+from equus_express.main import app
+from equus_express.routers.authentication import (
     Base,
     User,
     Role,
@@ -70,7 +70,7 @@ def db_session_fixture():
         TEST_DB_PATH.unlink()
     # If the data directory exists from authentication_server setup, clean it up too.
     # This might be specific to how you run tests and main app.
-    # Assuming `authentication_server.py` creates `./data` relative to its run location.
+    # Assuming `authentication.py` creates `./data` relative to its run location.
     # For tests, if `./data` is created, clean it up.
     test_data_dir = Path("./data")
     if test_data_dir.exists() and test_data_dir.is_dir():

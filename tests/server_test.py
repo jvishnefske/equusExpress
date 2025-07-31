@@ -2,7 +2,7 @@ import os
 import sqlite3
 import pytest
 from fastapi.testclient import TestClient
-from equus_express.server import (
+from equus_express.routers.telemetry import (
     app,
     init_secure_db,
     lifespan,
@@ -56,7 +56,7 @@ def setup_teardown_db():
 @pytest.fixture
 def mock_db_error():
     """Fixture to mock sqlite3.connect to raise an error."""
-    with patch("equus_express.server.sqlite3.connect") as mock_connect:
+    with patch("equus_express.routers.telemetry.sqlite3.connect") as mock_connect:
         mock_connect.side_effect = sqlite3.Error("Mock DB Error")
         yield mock_connect
 
@@ -418,7 +418,7 @@ def test_register_device_unexpected_error():
     """Test device registration endpoint handles unexpected errors."""
     # Mock register_or_update_device to raise a non-sqlite3 error
     with patch(
-        "equus_express.server.register_or_update_device",
+        "equus_express.routers.telemetry.register_or_update_device",
         side_effect=ValueError("Simulated unexpected error"),
     ):
         response = client.post(
@@ -461,7 +461,7 @@ def test_receive_telemetry_unexpected_error():
     """Test receive telemetry endpoint handles unexpected errors."""
     # Mock sqlite3.connect within the endpoint to raise a non-sqlite3 error
     with patch(
-        "equus_express.server.sqlite3.connect",
+        "equus_express.routers.telemetry.sqlite3.connect",
         side_effect=ValueError("Unexpected telemetry DB error"),
     ):
         telemetry_data = {
@@ -498,7 +498,7 @@ def test_update_device_status_db_error(mock_db_error):
 def test_update_device_status_unexpected_error():
     """Test update device status endpoint handles unexpected errors."""
     with patch(
-        "equus_express.server.sqlite3.connect",
+        "equus_express.routers.telemetry.sqlite3.connect",
         side_effect=ValueError("Unexpected status DB error"),
     ):
         status_data = {
@@ -529,7 +529,7 @@ def test_get_device_config_db_error(mock_db_error):
 def test_get_device_config_unexpected_error():
     """Test get device config endpoint handles unexpected errors."""
     with patch(
-        "equus_express.server.sqlite3.connect",
+        "equus_express.routers.telemetry.sqlite3.connect",
         side_effect=ValueError("Unexpected config DB error"),
     ):
         response = client.get(
@@ -550,7 +550,7 @@ def test_list_devices_db_error(mock_db_error):
 def test_list_devices_unexpected_error():
     """Test list devices endpoint handles unexpected errors."""
     with patch(
-        "equus_express.server.sqlite3.connect",
+        "equus_express.routers.telemetry.sqlite3.connect",
         side_effect=ValueError("Unexpected list devices DB error"),
     ):
         response = client.get("/api/admin/devices")
@@ -568,7 +568,7 @@ def test_get_device_telemetry_db_error(mock_db_error):
 def test_get_device_telemetry_unexpected_error():
     """Test get device telemetry endpoint handles unexpected errors."""
     with patch(
-        "equus_express.server.sqlite3.connect",
+        "equus_express.routers.telemetry.sqlite3.connect",
         side_effect=ValueError("Unexpected telemetry DB error"),
     ):
         response = client.get(f"/api/admin/telemetry/{TEST_DEVICE_ID}")

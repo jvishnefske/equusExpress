@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Request, APIRouter
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.security import HTTPBearer
 from fastapi.staticfiles import StaticFiles
@@ -113,7 +113,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Secure IoT API Server", lifespan=lifespan)
 security = HTTPBearer()
-
+router = APIRouter()
 
 # Data models
 class TelemetryData(BaseModel):

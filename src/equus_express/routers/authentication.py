@@ -136,8 +136,6 @@ router = fastapi.APIRouter()
 
 # --- Database Initialization ---
 def create_db_and_tables(db: Session):
-    # Ensure tables exist for app startup using the session's engine
-    Base.metadata.create_all(bind=db.bind)
     # This function ensures that roles and permissions are always present within the provided db session.
     # It also handles the creation of the initial superadmin if no users exist.
 
