@@ -46,6 +46,8 @@ export class BioreactorApp {
     }
 
     private initializeMonacoEditor(): void {
+        // Ensure an HTML element with id="code-editor-container" exists in your HTML file
+        // for the Monaco editor to be rendered correctly.
         const container = document.getElementById('code-editor-container');
         if (container) {
             codeEditorInstance = monaco.editor.create(container, {
@@ -58,7 +60,7 @@ export class BioreactorApp {
                 contextmenu: false, // Disable right-click context menu
             });
         } else {
-            console.error("Monaco editor container 'code-editor-container' not found!");
+            console.error("Monaco editor container 'code-editor-container' not found! Please ensure it exists in your HTML.");
         }
     }
 
