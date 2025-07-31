@@ -181,7 +181,19 @@ def create_db_and_tables(db: Session):
     # Create initial superadmin user if no users exist
     if db.query(User).count() == 0:
         superadmin_username = "superadmin"
-        temp_password = secrets.token_urlsafe(16)  # Generate a random password
+        # Generate a random password that meets all complexity requirements
+        import string
+        temp_password_chars = [
+            secrets.choice(string.ascii_uppercase),
+            secrets.choice(string.ascii_lowercase),
+            secrets.choice(string.digits),
+            secrets.choice('!@#$%^&*()_+-=[]{}|;:,.<>?'),
+        ]
+        # Fill the rest of the 16 characters randomly from all allowed printable characters
+        all_chars = string.ascii_letters + string.digits + '!@#$%^&*()_+-=[]{}|;:,.<>?'
+        temp_password_chars += [secrets.choice(all_chars) for _ in range(16 - len(temp_password_chars))]
+        secrets.SystemRandom().shuffle(temp_password_chars) # Shuffle to randomize order
+        temp_password = "".join(temp_password_chars)
         password_hash, salt = hash_password(temp_password)
 
         initial_superadmin = User(
