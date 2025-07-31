@@ -1036,17 +1036,19 @@
                     body: new URLSearchParams(formData)
                 });
                 
-                const data = await response.json();
-                
                 if (response.ok) {
+                    const data = await response.json();
                     currentToken = data.access_token;
                     localStorage.setItem('adminToken', currentToken);
                     showAdminPanel();
                 } else {
-                    showAlert('loginAlert', data.detail || 'Login failed', 'error');
+                    const errorData = await response.json(); // Try to parse error as JSON
+                    showAlert('loginAlert', errorData.detail || 'Login failed', 'error');
+                    console.error('Login failed response:', response.status, errorData);
                 }
             } catch (error) {
-                showAlert('loginAlert', 'Network error. Please try again.', 'error');
+                console.error('Network or parsing error during login:', error);
+                showAlert('loginAlert', 'Network error. Please try again. Check console for details.', 'error');
             } finally {
                 showLoading('loginLoading', false);
             }
