@@ -5,7 +5,7 @@ import os # Keep for os.getenv
 import secrets
 
 
-from fastapi import Depends, Request, APIRouter
+from fastapi import Depends, Request, APIRouter, HTTPException, status
 from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
@@ -33,10 +33,8 @@ from webauthn.helpers.structs import (
 from equus_express.models import *
 # Import SessionLocal, Base, engine, and get_db from the new module
 from equus_express.internal.session import SessionLocal, Base, engine, get_db
-# Import common exceptions and models
+# Import common exceptions and models (excluding HTTPException and status)
 from equus_express.exceptions import (
-    HTTPException,
-    status,
     UserNotFoundException,
     RoleNotFoundException,
     PermissionNotFoundException,
