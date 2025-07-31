@@ -12,7 +12,7 @@ services:
     ports:
       - 8000:8000
     networks:
-      - equus-web
+      - equusexpress-web
     volumes:
       - ./equus-data:/app/data
     labels:
@@ -22,8 +22,9 @@ services:
       - "traefik.http.routers.fastapi.tls.certresolver=letsencrypt"
 
 networks:
-  equus-web:
+  equusexpress-web:
     external: true
+    name: equusexpress-web
 
 volumes:
   equus-data:

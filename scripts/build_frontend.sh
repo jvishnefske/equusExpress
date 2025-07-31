@@ -12,7 +12,7 @@ then
 fi
 
 # Navigate to the frontend directory
-cd frontend
+pushd frontend
 
 # Install dependencies
 echo "Installing frontend dependencies..."
@@ -23,14 +23,14 @@ echo "Running yarn build..."
 yarn build
 
 # Navigate back to the root directory
-cd ..
+popd
 
 # Ensure the destination directory exists
-mkdir -p src/equus_express/dist
+mkdir -p src/equus_express/dashboard
 
 # Copy the build output to the desired location
 echo "Copying frontend/dist to src/equus_express/src/dist..."
-cp -R frontend/dist/* src/equus_express/dist/
-touch src/equus_express/dist/__init__
+cp -R frontend/dist/* src/equus_express/dashboard/
+touch src/equus_express/dashboard/__init__.py
 
 echo "Frontend build and copy complete!"

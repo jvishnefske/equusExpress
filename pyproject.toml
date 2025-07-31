@@ -30,7 +30,7 @@ dependencies = [
 where = ["src"] # Specify that packages are found under the 'src' directory
 
 [tool.setuptools.package-data]
-"equus_express" = ["static/*", "templates/*"] # Ensure built static files are included in the wheel
+"equus_express" = ["static/*", "templates/*", "dashboard/*"] # Ensure built static files are included in the wheel
 
 [tool.yarn.build]
 folder = "frontend"

@@ -7,7 +7,7 @@ export const fermentationModel: PhysicalModel = {
     sensors: [
         { id: 'temperature', name: 'Temperature', units: '°C' },
         { id: 'ph_level', name: 'pH Level', units: '' },
-        { id: 'dissolved_o2', name: 'Dissolved O₂', units: '%' },
+        { id: 'carbon_dioxide_ppm', name: 'Detected CO₂', units: 'ppm' },
         { id: 'od600', name: 'OD₆₀₀', units: '' },
         { id: 'contamination', name: 'Contamination', units: '' },
     ],

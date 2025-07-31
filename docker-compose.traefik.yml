@@ -14,7 +14,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik-data:/data
     networks:
-      - equus-web
+      - equusexpress-web
     command:
       # Entry points
       - --entrypoints.web.address=:80
@@ -48,9 +48,9 @@ services:
       - traefik.http.routers.dashboard.service=api@internal
 
 networks:
-  equus-web:
+  equusexpress-web:
     driver: bridge
-    name: equus-web
+    name: equusexpress-web
 
 volumes:
   traefik-data:
