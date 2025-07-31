@@ -108,7 +108,7 @@ app.include_router(telemetry.router)
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=authentication.ALLOWED_ORIGINS,
+    allow_origins=["*"],  # Temporarily allow all origins to confirm CORS issue
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*", "Content-Type", "Authorization"],
