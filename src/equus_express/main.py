@@ -93,6 +93,8 @@ async def combined_lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to set up resources during startup: {e}", exc_info=True)
         raise RuntimeError(f"Failed to initialize server resources: {e}")
+    node_dashboard_files_path = pkg_resources.files("equus_express.dashboard")
+    app.mount("/", StaticFiles(directory=str(node_dashboard_files_path)), name="IIoT dashboard")
 
     yield  # This is where your application starts running and serves requests
 
@@ -101,10 +103,10 @@ async def combined_lifespan(app: FastAPI):
     logger.info("Temporary resources cleaned up.")
 
     # static route for dashboard
-    node_dashboard_files_path = pkg_resources.files("equus_express.dashboard")
-    app.mount("/dashboard", StaticFiles(directory=str(node_dashboard_files_path)), name="IIoT dashboard")
+
 
 app = FastAPI(title="Secure IoT API Server", lifespan=combined_lifespan)
+
 app.include_router(authentication.router)
 app.include_router(telemetry.router)
 
@@ -118,4 +120,4 @@ app.add_middleware(
 )
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("equus_express.main:app", host="0.0.0.0", port=8000, reload=True)
