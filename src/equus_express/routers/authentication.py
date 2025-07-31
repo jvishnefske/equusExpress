@@ -134,7 +134,7 @@ WEBAUTHN_RP_NAME = "Local Admin Portal"
 # Allow both localhost and 127.0.0.1 for local development
 WEBAUTHN_ORIGIN = os.getenv("WEBAUTHN_ORIGIN", "http://localhost:8000")
 ALLOWED_ORIGINS = [WEBAUTHN_ORIGIN, "http://127.0.0.1:8000"]
-router = fastapi.APIRouter()
+router = APIRouter() # Changed from fastapi.APIRouter() to APIRouter()
 
 # --- Database Initialization ---
 def create_db_and_tables(db: Session):
