@@ -382,15 +382,6 @@ def has_permission(permission_name: str):
 # --- FastAPI App Setup ---
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Handles startup and shutdown events."""
-    with SessionLocal() as db:
-        Base.metadata.create_all(
-            bind=engine
-        )  # Ensure tables exist for app startup
-        create_db_and_tables(db)  # Create default roles/permissions
-    yield
 
 
 
