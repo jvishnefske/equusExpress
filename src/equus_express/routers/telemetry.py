@@ -37,11 +37,11 @@ async def lifespan(app: FastAPI):
 
     # Use ExitStack to manage the lifecycle of temporary resources (e.g., extracted static files, templates)
     # This ensures cleanup on application shutdown.
-    app.state.temp_resource_manager = ExitStack()
+    router.state.temp_resource_manager = ExitStack()
 
     try:
         # --- Handle Static Files ---
-        temp_static_dir = app.state.temp_resource_manager.enter_context(
+        temp_static_dir = router.state.temp_resource_manager.enter_context(
             tempfile.TemporaryDirectory()
         )
         static_files_path = Path(temp_static_dir)
@@ -65,15 +65,15 @@ async def lifespan(app: FastAPI):
                     )
             logger.info(f"Static files extracted to {static_files_path}")
 
-        app.mount(
+        router.mount(
             "/static",
             StaticFiles(directory=static_files_path),
             name="static",
         )
-        app.state.static_path = static_files_path # Store for favicon serving
+        router.state.static_path = static_files_path # Store for favicon serving
 
         # --- Handle Templates ---
-        temp_templates_dir = app.state.temp_resource_manager.enter_context(
+        temp_templates_dir = router.state.temp_resource_manager.enter_context(
             tempfile.TemporaryDirectory()
         )
         templates_path = Path(temp_templates_dir)
@@ -98,7 +98,7 @@ async def lifespan(app: FastAPI):
             logger.info(f"Templates extracted to {templates_path}")
 
         # Initialize Jinja2Templates with the dynamically determined path
-        app.state.templates = Jinja2Templates(directory=templates_path)
+        router.state.templates = Jinja2Templates(directory=templates_path)
 
     except Exception as e:
         logger.error(f"Failed to set up static files or templates during startup: {e}", exc_info=True)
@@ -107,11 +107,10 @@ async def lifespan(app: FastAPI):
     yield  # This is where your application starts running and serves requests
 
     logger.info("Application shutting down...")
-    app.state.temp_resource_manager.close()  # This will clean up all temporary directories
+    router.state.temp_resource_manager.close()  # This will clean up all temporary directories
     logger.info("Temporary resources cleaned up.")
 
 
-app = FastAPI(title="Secure IoT API Server", lifespan=lifespan)
 security = HTTPBearer()
 router = APIRouter()
 
@@ -357,12 +356,12 @@ def register_or_update_device(
         )
 
 
-@app.get("/")
+@router.get("/api")
 async def root(request: Request):
     return request.app.state.templates.TemplateResponse("index.html", {"request": request})
 
 
-@app.get("/health")
+@router.get("/health")
 async def health_check():
     """Health check endpoint"""
     return {
@@ -371,7 +370,7 @@ async def health_check():
     }
 
 
-@app.get("/favicon.ico", include_in_schema=False)
+@router.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     """
     Serves the favicon.ico directly from the package's static resources.
@@ -393,8 +392,8 @@ async def favicon():
         # If it's expected to be served from the top level, we explicitly fetch it.
 
         try:
-            # Access the path used for static files from app.state
-            static_base_path = Path(app.state.static_path)
+            # Access the path used for static files from router.state
+            static_base_path = Path(router.state.static_path)
             favicon_path = static_base_path / "favicon.ico"
 
             if not favicon_path.exists():
@@ -402,7 +401,7 @@ async def favicon():
                 
             return FileResponse(str(favicon_path))
         except (AttributeError, KeyError) as e:
-            # Catch if app.state.static_path is not yet set or accessible
+            # Catch if router.state.static_path is not yet set or accessible
             logger.error(f"Static path not initialized for favicon: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Server resources not fully initialized for favicon")
     except Exception as e:
@@ -410,7 +409,7 @@ async def favicon():
         raise HTTPException(status_code=500, detail="Internal server error serving favicon")
 
 
-@app.get("/dashboard", response_class=HTMLResponse)
+@router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
     """Simple dashboard to display device telemetry."""
     html_content = """
@@ -425,14 +424,14 @@ async def dashboard():
             <h1>Equus Express Device Dashboard</h1>
             <div id="devices-container">Loading devices...</div>
         </div>
-        <script src="/static/app.js"></script>
+        <script src="/static/router.js"></script>
     </body>
     </html>
     """
     return HTMLResponse(content=html_content)
 
 
-@app.post("/api/register")
+@router.post("/api/register")
 async def register_device(
     registration_data: PublicKeyRegistration, request: Request
 ):
@@ -468,7 +467,7 @@ async def register_device(
         )
 
 
-@app.get("/api/device/info")
+@router.get("/api/device/info")
 async def get_device_info(
     request: Request, device_id: str = Depends(get_authenticated_device_id)
 ):
@@ -513,7 +512,7 @@ async def get_device_info(
         )
 
 
-@app.post("/api/telemetry")
+@router.post("/api/telemetry")
 async def receive_telemetry(
     telemetry: TelemetryData,
     request: Request,
@@ -569,7 +568,7 @@ async def receive_telemetry(
         )
 
 
-@app.post("/api/device/status")
+@router.post("/api/device/status")
 async def update_device_status(
     status_update: StatusUpdate,
     request: Request,
@@ -634,7 +633,7 @@ async def update_device_status(
         raise HTTPException(status_code=500, detail="Failed to update status")
 
 
-@app.get("/api/device/{device_id}/config")
+@router.get("/api/device/{device_id}/config")
 async def get_device_config(
     device_id: str,
     request: Request,
@@ -686,7 +685,7 @@ async def get_device_config(
         )
 
 
-@app.get("/api/admin/devices")
+@router.get("/api/admin/devices")
 async def list_devices():
     """List all devices (admin endpoint)"""
     try:
@@ -722,7 +721,7 @@ async def list_devices():
         raise HTTPException(status_code=500, detail="Failed to list devices")
 
 
-@app.get("/api/admin/telemetry/{device_id}")
+@router.get("/api/admin/telemetry/{device_id}")
 async def get_device_telemetry(device_id: str, limit: int = 100):
     """Get telemetry data for a specific device (admin endpoint)"""
     try:
