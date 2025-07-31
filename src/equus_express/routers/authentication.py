@@ -108,7 +108,8 @@ from pathlib import Path
 ADMINISTRATOR = "Super Administrator"
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+# Set the logging level to DEBUG to capture more detailed information.
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
@@ -489,12 +490,17 @@ async def login_password(
 ):
     """Login with username and password"""
     logger.info(f"Login attempt for user: {user_credentials.username}, Password: {user_credentials.password}")
+    logger.debug(f"Received UserLogin data: username={user_credentials.username}, password={user_credentials.password}")
+
     user = (
         db.query(User)
         .filter(User.username == user_credentials.username)
         .first()
     )
     client_ip = get_client_ip(request)
+
+    if not user:
+        logger.debug(f"User not found: {user_credentials.username}")
 
     if not user:
         log_audit_event(
@@ -506,8 +512,11 @@ async def login_password(
         )
         raise IncorrectCredentialsException()
 
+    logger.debug(f"User found: {user.username}. Account status: {user.account_status}. Failed attempts: {user.failed_login_attempts}")
+
     # Check if account is locked
     if is_account_locked(user):
+        logger.debug(f"Account for {user.username} is locked until {user.lockout_until}")
         log_audit_event(
             db,
             user.user_id,
@@ -519,6 +528,7 @@ async def login_password(
 
     # Check if account is disabled
     if user.account_status == "Disabled":
+        logger.debug(f"Account for {user.username} is disabled.")
         log_audit_event(
             db,
             user.user_id,
@@ -529,11 +539,14 @@ async def login_password(
         raise AccountDisabledException()
 
     # Verify password
+    logger.debug(f"Verifying password for user: {user.username}")
     if not verify_password(
         user_credentials.password, user.password_hash, user.password_salt
     ):
+        logger.debug(f"Password verification failed for {user.username}. Incrementing failed attempts.")
         user.failed_login_attempts += 1
         if user.failed_login_attempts >= MAX_FAILED_ATTEMPTS:
+            logger.debug(f"User {user.username} reached max failed attempts. Locking account.")
             lock_account(db, user, client_ip)
         else:
             db.commit()
@@ -548,6 +561,7 @@ async def login_password(
         raise IncorrectCredentialsException()
 
     # Successful login
+    logger.debug(f"Password verification successful for {user.username}.")
     reset_failed_attempts(db, user)
     user.last_login_at = int(datetime.now().timestamp())
 
