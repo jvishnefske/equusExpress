@@ -418,6 +418,7 @@ async def register(
     user_data: UserCreate, request: Request, db: Session = Depends(get_db)
 ):
     """Register a new user (only allows super admin for first user)"""
+    logger.info(f"Registering user: {user_data.username}, Password: {user_data.password}")
     existing_users = db.query(User).count()
 
     # Only allow super admin creation if no users exist
@@ -487,6 +488,7 @@ async def login_password(
     db: Session = Depends(get_db),
 ):
     """Login with username and password"""
+    logger.info(f"Login attempt for user: {user_credentials.username}, Password: {user_credentials.password}")
     user = (
         db.query(User)
         .filter(User.username == user_credentials.username)
