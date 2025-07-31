@@ -60,6 +60,7 @@ venv.bak/
 secure_devices.db
 letsencrypt
 *.sw[po]
+*.jwt
 
 # node
 # Logs
