@@ -385,13 +385,13 @@ export function configureBlockly(model: PhysicalModel): Blockly.WorkspaceSvg {
             {
                 kind: 'category',
                 name: 'Actuators',
-                colour: 0, // Red for actuators, generally darker
+                // colour: 0, // Red for actuators, generally darker
                 contents: model.actuators.map(a => ({ kind: 'block', type: a.id })),
             },
             {
                 kind: 'category',
                 name: 'Math',
-                colour: 240, // Darker blue for math
+                // colour: 240, // Darker blue for math
                 contents: [
                     { kind: 'block', type: 'math_number' },
                     { kind: 'block', type: 'math_arithmetic' },
@@ -400,7 +400,7 @@ export function configureBlockly(model: PhysicalModel): Blockly.WorkspaceSvg {
             {
                 kind: 'category',
                 name: 'Time',
-                colour: 170, // Darker green for time
+                // colour: 170, // Darker green for time
                 contents: [
                     // Future block: wait for duration
                     // Future block: check stability over time
