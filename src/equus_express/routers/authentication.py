@@ -123,9 +123,11 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login/password")
 WEBAUTHN_RP_ID = os.getenv("WEBAUTHN_RP_ID", "localhost")
 WEBAUTHN_RP_NAME = "Local Admin Portal"
 # Allow both localhost and 127.0.0.1 for local development
-WEBAUTHN_ORIGIN = os.getenv("WEBAUTHN_ORIGIN", "http://localhost:8000")
-ALLOWED_ORIGINS = [WEBAUTHN_ORIGIN, "http://127.0.0.1:8000"]
-router = APIRouter() # Changed from fastapi.APIRouter() to APIRouter()
+WEBAUTHN_ORIGIN = os.getenv("WEBAUTHN_RP_ID", "http://localhost:8000")
+# The ALLOWED_ORIGINS should reflect the actual origins where your frontend is served.
+# 'None' in the list means allowing requests without an Origin header (e.g., from file:// in some browsers).
+ALLOWED_ORIGINS = [WEBAUTHN_ORIGIN, "http://127.0.0.1:8000", None] # Added None to handle file:// or direct local access
+router = APIRouter()
 
 # --- Database Initialization ---
 def create_db_and_tables(db: Session):
