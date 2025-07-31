@@ -2,14 +2,10 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, field_validator
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import (
-    sessionmaker,
-    declarative_base,
     relationship,
     Session,
-    declarative_base,
 )
 from sqlalchemy import (
-    create_engine,
     Column,
     Integer,
     String,
@@ -18,8 +14,7 @@ from sqlalchemy import (
     ForeignKey,
     Boolean,
 )
-
-Base = declarative_base()
+from equus_express.internal.session import Base
 
 # --- Database Models (SQLAlchemy) ---
 class User(Base):
