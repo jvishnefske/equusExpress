@@ -374,7 +374,7 @@ async def health_check():
 
 
 @router.get("/favicon.ico", include_in_schema=False)
-async def favicon():
+async def favicon(request: Request):
     """
     Serves the favicon.ico directly from the package's static resources.
     This is for browsers that automatically look for /favicon.ico at the root.
@@ -763,12 +763,3 @@ async def get_device_telemetry(device_id: str, limit: int = 100):
         )
 
 
-if __name__ == "__main__":
-    # The server is intended to run behind a proxy like Traefik that handles SSL/TLS.
-    # Therefore, we run on HTTP.
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=8000,  # Changed to a standard HTTP port
-        log_level="info",
-    )
