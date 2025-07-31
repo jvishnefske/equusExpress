@@ -45,7 +45,7 @@ For Docker Compose deployments, environment variables (e.g., `HOSTNAME`, `LETSEN
 
 ## Getting Started
 
-### 1. Install Dependencies 📦
+### 1. Install Python Dependencies 📦
 
 Install the required Python packages using `uv`:
 
@@ -53,7 +53,19 @@ Install the required Python packages using `uv`:
 uv pip install .[dev] # Install main and development dependencies from pyproject.toml
 ```
 
-### 2. Run the Server ▶️
+### 2. Build Frontend (Optional) 🌐
+
+The frontend can be built using `yarn` or the provided build script.
+
+```bash
+# Using yarn
+cd frontend && yarn install && yarn build
+
+# Or using the convenience script
+scripts/build_frontend.sh
+```
+
+### 3. Run the Server ▶️
 
 The server runs on HTTP (default port 8000) and is designed to be placed behind an SSL-terminating proxy like Traefik.
 
@@ -63,7 +75,7 @@ uv run python3 -m equus_express.server
 
 Once running, you can access the server's health check at `http://localhost:8000/health`. ✅
 
-### 3. Run the Client ▶️
+### 4. Run the Client ▶️
 
 The client will generate a new RSA key pair in `~/.equus_express/keys/` on its first run and register its public key with the server.
 
@@ -72,7 +84,7 @@ uv run python3 -m equus_express.client http://localhost:8000 [your_device_id]
 ```
 Replace `http://localhost:8000` with the actual URL of your server (or proxy). `[your_device_id]` is optional; if not provided, it defaults to your hostname.
 
-### 4. View the Dashboard 🌐
+### 5. View the Dashboard 🌐
 
 Open your web browser to access the device dashboard:
 
