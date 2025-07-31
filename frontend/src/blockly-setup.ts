@@ -1,6 +1,10 @@
 import * as Blockly from 'blockly';
 import { javascriptGenerator } from 'blockly/javascript';
 import { PhysicalModel } from './models';
+import * as monaco from 'monaco-editor'; // Import monaco editor
+
+// Declare an external function to update the Monaco editor, which will be provided by interface.ts
+declare function updateCodeEditor(code: string): void;
 
 // -- Types for Import/Export --
 interface ControlProcedure {
@@ -353,9 +357,10 @@ async function showListDialog(workspace: Blockly.WorkspaceSvg): Promise<void> {
 /**
  * Configures Blockly with custom blocks and a dynamic toolbox.
  * @param model - The physical model of the machine.
+ * @param updateCodeEditorCallback - A callback function to update the Monaco Editor with generated code.
  * @returns The configured Blockly workspace.
  */
-export function configureBlockly(model: PhysicalModel): Blockly.WorkspaceSvg {
+export function configureBlockly(model: PhysicalModel, updateCodeEditorCallback: (code: string) => void): Blockly.WorkspaceSvg {
     // 1. Define custom blocks for all sensors and actuators in the model
     model.sensors.forEach(sensor => defineSensorBlock(sensor.id, sensor.name));
     model.actuators.forEach(actuator => defineActuatorBlock(actuator.id, actuator.name, actuator.params));
@@ -435,6 +440,18 @@ export function configureBlockly(model: PhysicalModel): Blockly.WorkspaceSvg {
 
     // Add import/export functionality
     addImportExportButtons(workspace);
+
+    // Initial code generation and update
+    updateCodeEditorCallback(javascriptGenerator.workspaceToCode(workspace));
+
+    // Listen for changes in the Blockly workspace and update the Monaco editor
+    workspace.addChangeListener((event: Blockly.Events.Abstract) => {
+        // Only update code on relevant events (e.g., block creation, deletion, movement, change)
+        if (event.is} {
+            const code = javascriptGenerator.workspaceToCode(workspace);
+            updateCodeEditorCallback(code);
+        }
+    });
 
     return workspace;
 }

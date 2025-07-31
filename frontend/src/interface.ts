@@ -1,4 +1,28 @@
 
+import * as monaco from 'monaco-editor';
+
+// Configure Monaco Editor environment
+self.MonacoEnvironment = {
+    getWorkerUrl: function (moduleId, label) {
+        if (label === 'json') {
+            return './json.worker.js';
+        }
+        if (label === 'css' || label === 'scss' || label === 'less') {
+            return './css.worker.js';
+        }
+        if (label === 'html' || label === 'handlebars' || label === 'razor') {
+            return './html.worker.js';
+        }
+        if (label === 'typescript' || label === 'javascript') {
+            return './ts.worker.js';
+        }
+        return './editor.worker.js';
+    }
+};
+
+// Global variable to hold the Monaco editor instance for external access
+let codeEditorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
+
 // Application State Management
 export class BioreactorApp {
     // Add types for these properties for better type safety
@@ -12,14 +36,36 @@ export class BioreactorApp {
         this.recipes = new Map();
         this.bioreactors = new Map();
         this.telemetryData = new Map();
-
-        // init() is now called from main.ts after modules are instantiated
     }
 
     init() {
         this.setupNavigation();
         this.loadInitialData();
         this.startTelemetrySimulation();
+        this.initializeMonacoEditor(); // Initialize Monaco editor here
+    }
+
+    private initializeMonacoEditor(): void {
+        const container = document.getElementById('code-editor-container');
+        if (container) {
+            codeEditorInstance = monaco.editor.create(container, {
+                value: '// Generated JavaScript code from Blockly will appear here',
+                language: 'javascript',
+                readOnly: true, // Make it read-only as it's an output display
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                overviewRulerLanes: 0, // Disable overview ruler
+                contextmenu: false, // Disable right-click context menu
+            });
+        } else {
+            console.error("Monaco editor container 'code-editor-container' not found!");
+        }
+    }
+
+    public updateCodeEditor(code: string): void {
+        if (codeEditorInstance) {
+            codeEditorInstance.setValue(code);
+        }
     }
 
     setupNavigation() {
