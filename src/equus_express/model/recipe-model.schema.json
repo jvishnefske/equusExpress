@@ -1,0 +1,149 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/schemas/recipe-model.schema.json",
+  "title": "ISA-88 Recipe Model (PFC)",
+  "description": "A schema for defining a production recipe based on the Procedure Function Chart (PFC) / Sequential Function Chart (SFC) model.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "description": "A unique identifier for this recipe (UUID recommended).",
+      "type": "string",
+      "format": "uuid"
+    },
+    "name": {
+      "description": "A human-readable name for the recipe.",
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "description": "The version of this recipe, following semantic versioning (e.g., '1.0.0').",
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$"
+    },
+    "startStep": {
+      "description": "The 'id' of the first step to be executed when the recipe starts.",
+      "type": "string"
+    },
+    "steps": {
+      "description": "An array of all steps that make up the recipe procedure.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/stepDefinition"
+      }
+    }
+  },
+  "required": ["id", "name", "version", "startStep", "steps"],
+
+  "definitions": {
+    "stepDefinition": {
+      "title": "Recipe Step",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "A unique identifier for this step within the recipe.",
+          "type": "string"
+        },
+        "phase": {
+          "description": "The name of the Equipment Phase to execute for this step.",
+          "type": "string"
+        },
+        "parameters": {
+          "description": "An object of key-value pairs representing the parameters to pass to the phase.",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "transitionTo": {
+          "description": "The 'id' of the next step to transition to. Can be an array of ids for parallel branches.",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "transitionCondition": {
+          "description": "The logical condition that must be met to complete this step and move to the next.",
+          "$ref": "#/definitions/transitionConditionDefinition"
+        }
+      },
+      "required": ["id", "phase", "parameters", "transitionTo", "transitionCondition"]
+    },
+    "transitionConditionDefinition": {
+      "title": "Transition Condition",
+      "type": "object",
+      "properties": {
+        "logic": {
+          "description": "The logical operator to apply to the array of conditions.",
+          "type": "string",
+          "enum": ["AND", "OR"]
+        },
+        "conditions": {
+          "description": "An array of individual conditions that make up the transition logic.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/conditionItem"
+          }
+        }
+      },
+      "required": ["logic", "conditions"]
+    },
+    "conditionItem": {
+      "title": "Individual Condition Item",
+      "description": "A single condition, which can be one of several types (e.g., tag-based or time-based).",
+      "oneOf": [
+        { "$ref": "#/definitions/tagCondition" },
+        { "$ref": "#/definitions/delayCondition" },
+        { "$ref": "#/definitions/phaseStateCondition" }
+      ]
+    },
+    "tagCondition": {
+      "title": "Tag-Based Condition",
+      "type": "object",
+      "properties": {
+        "tag": {
+          "description": "The unique system tag of the process variable to check (e.g., 'BR101.TEMP.PV').",
+          "type": "string"
+        },
+        "op": {
+          "description": "The comparison operator.",
+          "type": "string",
+          "enum": ["==", "!=", ">", ">=", "<", "<="]
+        },
+        "value": {
+          "description": "The value to compare the tag against.",
+          "type": ["string", "number", "boolean"]
+        }
+      },
+      "required": ["tag", "op", "value"],
+      "additionalProperties": false
+    },
+    "delayCondition": {
+      "title": "Time-Based Delay Condition",
+      "type": "object",
+      "properties": {
+        "type": { "const": "delay" },
+        "value": {
+          "description": "The duration of the delay (e.g., '30s', '15m', '1h').",
+          "type": "string",
+          "pattern": "^(\\d+)(s|m|h)$"
+        }
+      },
+      "required": ["type", "value"],
+      "additionalProperties": false
+    },
+    "phaseStateCondition": {
+      "title": "Phase State Condition",
+      "type": "object",
+      "properties": {
+        "type": { "const": "phase_state" },
+        "phase_id": { "description": "The 'id' of the step whose phase state to check.", "type": "string" },
+        "state": {
+          "description": "The ISA-88 state to check for.",
+          "type": "string",
+          "enum": ["IDLE", "RUNNING", "COMPLETE", "HELD", "STOPPED", "ABORTED"]
+        }
+      },
+      "required": ["type", "phase_id", "state"],
+      "additionalProperties": false
+    }
+  }
+}

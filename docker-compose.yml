@@ -4,69 +4,26 @@ services:
     environment:
       - DOMAIN=${DOMAIN}
       - UVICORN_LOG_LEVEL=debug
+      - EQUUS_DATA_DIR=/app/data # Set the path to the data directory within the mounted volume
     build: .
     restart: unless-stopped
     expose:
       - 8000
+    ports:
+      - 8000:8000
     networks:
-      - web
+      - equus-web
+    volumes:
+      - ./equus-data:/app/data
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.fastapi.rule=Host(`${DOMAIN}`)"
       - "traefik.http.routers.fastapi.entrypoints=websecure"
       - "traefik.http.routers.fastapi.tls.certresolver=letsencrypt"
 
-  traefik:
-    image: traefik:v3.0
-    container_name: traefik
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "8080:8080"
-    environment:
-      - DOMAIN=${DOMAIN}
-      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - traefik-data:/data
-    networks:
-      - web
-    command:
-      # Entry points
-      - --entrypoints.web.address=:80
-      - --entrypoints.websecure.address=:443
-      - --entrypoints.websecure.http3
-
-      # Docker provider
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-
-      # SSL certificates
-      - --certificatesresolvers.letsencrypt.acme.email=${LETSENCRYPT_EMAIL}
-      - --certificatesresolvers.letsencrypt.acme.storage=/data/acme.json
-      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
-
-      # HTTP to HTTPS redirect
-      - --entrypoints.web.http.redirections.entrypoint.to=websecure
-      - --entrypoints.web.http.redirections.entrypoint.scheme=https
-      
-      # Dashboard
-      - --api.dashboard=true
-      - --api.insecure=true
-      
-      # Logging
-      - --log.level=INFO
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.dashboard.rule=Host(`traefik.${DOMAIN}`)
-      - traefik.http.routers.dashboard.entrypoints=websecure
-      - traefik.http.routers.dashboard.tls.certresolver=letsencrypt
-      - traefik.http.routers.dashboard.service=api@internal
-
 networks:
-  web:
-    driver: bridge
+  equus-web:
+    external: true
 
 volumes:
-  traefik-data:
+  equus-data:
