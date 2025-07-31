@@ -5,8 +5,8 @@ from fastapi.testclient import TestClient
 from equus_express.main import app
 from equus_express.routers.telemetry import (
     init_secure_db,
-    lifespan,
-)  # Import lifespan
+)
+from equus_express.main import combined_lifespan # Import combined_lifespan
 import tempfile
 from fastapi import FastAPI  # Import FastAPI to create new app instances
 from datetime import datetime, timezone
@@ -581,7 +581,7 @@ async def test_favicon_not_found():
     This test needs to create its own client to ensure lifespan is run
     for proper app.state initialization before mocking.
     """
-    temp_app = FastAPI(lifespan=app.router.lifespan_context) # Use the same lifespan context
+    temp_app = FastAPI(lifespan=combined_lifespan) # Use the same lifespan context
 
     # Mock Path.exists to simulate the favicon file not being found.
     # We must patch the method that will be called on the Path object after lifespan setup.
@@ -599,7 +599,7 @@ async def test_lifespan_static_file_setup_error():
     """Test lifespan context manager handles errors during static file setup."""
     # Create a new FastAPI app instance specifically for this test
     # This ensures a fresh lifespan context is triggered with the TestClient.
-    temp_app = FastAPI(lifespan=lifespan)
+    temp_app = FastAPI(lifespan=combined_lifespan)
 
     # Mock tempfile.TemporaryDirectory to raise an error
     with patch(
