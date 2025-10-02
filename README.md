@@ -2,7 +2,7 @@
 
 **Automation Engineers, are you tired of the complexity of managing and monitoring your custom industrial devices running critical batch processes?** ⚙️
 
-Equus Express provides solution for device registration. Take control of your industrial IoT deployment with confidence. ✨
+Equus Express provides a framework for device registration. Take control of your industrial IoT deployment with confidence. ✨
 
 ## Badges
 
