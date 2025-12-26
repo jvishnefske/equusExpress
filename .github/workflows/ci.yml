@@ -69,7 +69,8 @@ jobs:
     name: SonarQube
     runs-on: ubuntu-latest
     needs: coverage
-    if: ${{ secrets.SONAR_TOKEN != '' }}
+    # Skip SonarQube if token is not configured
+    if: ${{ github.repository_owner == 'jvishnefske' && vars.ENABLE_SONAR == 'true' }}
 
     steps:
       - uses: actions/checkout@v4
