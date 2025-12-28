@@ -140,6 +140,11 @@ class DeviceConfig(BaseModel):
     config: Dict[str, Any]
 
 
+class DeviceConfigUpdate(BaseModel):
+    """Model for updating device configuration"""
+    config: Dict[str, Any]
+
+
 class PublicKeyRegistration(BaseModel):
     device_id: str
     public_key: str
@@ -668,6 +673,72 @@ async def get_device_config(
         )
 
 
+@app.put("/api/device/{device_id}/config")
+async def update_device_config(
+    device_id: str,
+    config_update: DeviceConfigUpdate,
+    request: Request,
+    authenticated_device_id: str = Depends(get_authenticated_device_id),
+):
+    """Update device configuration"""
+    # Verify device_id in path matches authenticated device ID
+    if device_id != authenticated_device_id:
+        raise HTTPException(
+            status_code=403, detail="Access denied: Device ID mismatch."
+        )
+
+    try:
+        db_file = dp_path()
+        conn = sqlite3.connect(db_file)
+        cursor = conn.cursor()
+
+        # Check if config exists for this device
+        cursor.execute(
+            "SELECT device_id FROM device_config WHERE device_id = ?",
+            (device_id,),
+        )
+        exists = cursor.fetchone()
+
+        if exists:
+            # Update existing config
+            cursor.execute(
+                """
+                UPDATE device_config
+                SET config = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE device_id = ?
+                """,
+                (json.dumps(config_update.config), device_id),
+            )
+        else:
+            # Insert new config
+            cursor.execute(
+                """
+                INSERT INTO device_config (device_id, config)
+                VALUES (?, ?)
+                """,
+                (device_id, json.dumps(config_update.config)),
+            )
+
+        conn.commit()
+        conn.close()
+
+        logger.info(f"Configuration updated for device {repr(device_id)}")
+        return {
+            "status": "success",
+            "message": "Configuration updated",
+            "device_id": device_id,
+            "config": config_update.config,
+        }
+
+    except Exception as e:
+        # Uncovered: Unexpected error in update_device_config
+        logger.error(f"Failed to update device config: {e}")
+        raise HTTPException(
+            status_code=500, detail="Failed to update configuration"
+        )
+
+
 @app.get("/api/admin/devices")
 async def list_devices():
     """List all devices (admin endpoint)"""
@@ -740,6 +811,148 @@ async def get_device_telemetry(device_id: str, limit: int = 100):
         logger.error(f"Failed to get telemetry: {e}")
         raise HTTPException(
             status_code=500, detail="Failed to retrieve telemetry"
+        )
+
+
+@app.put("/api/admin/device/{device_id}/config")
+async def admin_update_device_config(
+    device_id: str,
+    config_update: DeviceConfigUpdate,
+):
+    """
+    Update device configuration (admin endpoint).
+    Allows administrators to set or update configuration for any device.
+    """
+    try:
+        db_file = dp_path()
+        conn = sqlite3.connect(db_file)
+        cursor = conn.cursor()
+
+        # Verify device exists
+        cursor.execute(
+            "SELECT device_id FROM devices WHERE device_id = ?",
+            (device_id,),
+        )
+        device_exists = cursor.fetchone()
+
+        if not device_exists:
+            conn.close()
+            raise HTTPException(
+                status_code=404, detail=f"Device '{device_id}' not found"
+            )
+
+        # Check if config exists for this device
+        cursor.execute(
+            "SELECT device_id FROM device_config WHERE device_id = ?",
+            (device_id,),
+        )
+        config_exists = cursor.fetchone()
+
+        if config_exists:
+            # Update existing config
+            cursor.execute(
+                """
+                UPDATE device_config
+                SET config = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE device_id = ?
+                """,
+                (json.dumps(config_update.config), device_id),
+            )
+        else:
+            # Insert new config
+            cursor.execute(
+                """
+                INSERT INTO device_config (device_id, config)
+                VALUES (?, ?)
+                """,
+                (device_id, json.dumps(config_update.config)),
+            )
+
+        conn.commit()
+        conn.close()
+
+        logger.info(f"Admin updated configuration for device {repr(device_id)}")
+        return {
+            "status": "success",
+            "message": "Configuration updated by admin",
+            "device_id": device_id,
+            "config": config_update.config,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Uncovered: Unexpected error in admin_update_device_config
+        logger.error(f"Failed to update device config (admin): {e}")
+        raise HTTPException(
+            status_code=500, detail="Failed to update configuration"
+        )
+
+
+@app.get("/api/admin/device/{device_id}/config")
+async def admin_get_device_config(device_id: str):
+    """
+    Get device configuration (admin endpoint).
+    Allows administrators to view configuration for any device.
+    """
+    try:
+        db_file = dp_path()
+        conn = sqlite3.connect(db_file)
+        cursor = conn.cursor()
+
+        # Verify device exists
+        cursor.execute(
+            "SELECT device_id FROM devices WHERE device_id = ?",
+            (device_id,),
+        )
+        device_exists = cursor.fetchone()
+
+        if not device_exists:
+            conn.close()
+            raise HTTPException(
+                status_code=404, detail=f"Device '{device_id}' not found"
+            )
+
+        # Get config
+        cursor.execute(
+            "SELECT config, updated_at FROM device_config WHERE device_id = ?",
+            (device_id,),
+        )
+        result = cursor.fetchone()
+        conn.close()
+
+        if result:
+            config = json.loads(result[0])
+            return {
+                "device_id": device_id,
+                "config": config,
+                "updated_at": result[1],
+            }
+        else:
+            # Return default configuration
+            default_config = {
+                "telemetry_interval": 60,
+                "log_level": "INFO",
+                "features": {
+                    "telemetry_enabled": True,
+                    "remote_control": False,
+                    "auto_update": True,
+                },
+            }
+            return {
+                "device_id": device_id,
+                "config": default_config,
+                "updated_at": None,
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Uncovered: Unexpected error in admin_get_device_config
+        logger.error(f"Failed to get device config (admin): {e}")
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve configuration"
         )
 
 

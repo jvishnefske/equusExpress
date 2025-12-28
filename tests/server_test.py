@@ -558,3 +558,274 @@ def test_lifespan_static_file_setup_error():
             with TestClient(temp_app) as client:
                 # No actual requests needed, just the startup part is tested
                 pass
+
+
+# Tests for Device Configuration Update endpoints
+
+def test_update_device_config():
+    """Test updating device configuration by the device itself."""
+    # First, register the device
+    client.post(
+        "/api/register",
+        json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+    )
+
+    # Update config
+    new_config = {
+        "telemetry_interval": 30,
+        "log_level": "DEBUG",
+        "features": {
+            "telemetry_enabled": True,
+            "remote_control": True,
+            "auto_update": False,
+        },
+    }
+    response = client.put(
+        f"/api/device/{TEST_DEVICE_ID}/config",
+        json={"config": new_config},
+        headers={"X-Device-Id": TEST_DEVICE_ID},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    assert response.json()["config"] == new_config
+
+    # Verify config is stored by fetching it
+    response = client.get(
+        f"/api/device/{TEST_DEVICE_ID}/config",
+        headers={"X-Device-Id": TEST_DEVICE_ID},
+    )
+    assert response.status_code == 200
+    assert response.json()["config"] == new_config
+
+
+def test_update_device_config_twice():
+    """Test updating device configuration multiple times."""
+    # Register the device
+    client.post(
+        "/api/register",
+        json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+    )
+
+    # First update
+    config_v1 = {"telemetry_interval": 30}
+    response = client.put(
+        f"/api/device/{TEST_DEVICE_ID}/config",
+        json={"config": config_v1},
+        headers={"X-Device-Id": TEST_DEVICE_ID},
+    )
+    assert response.status_code == 200
+
+    # Second update
+    config_v2 = {"telemetry_interval": 120, "log_level": "ERROR"}
+    response = client.put(
+        f"/api/device/{TEST_DEVICE_ID}/config",
+        json={"config": config_v2},
+        headers={"X-Device-Id": TEST_DEVICE_ID},
+    )
+    assert response.status_code == 200
+    assert response.json()["config"] == config_v2
+
+    # Verify latest config is stored
+    response = client.get(
+        f"/api/device/{TEST_DEVICE_ID}/config",
+        headers={"X-Device-Id": TEST_DEVICE_ID},
+    )
+    assert response.json()["config"] == config_v2
+
+
+def test_update_device_config_device_id_mismatch():
+    """Test updating config with device ID mismatch between path and header."""
+    # Register the device
+    client.post(
+        "/api/register",
+        json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+    )
+
+    mismatched_device_id = "another_device"
+    response = client.put(
+        f"/api/device/{mismatched_device_id}/config",
+        json={"config": {"telemetry_interval": 30}},
+        headers={"X-Device-Id": TEST_DEVICE_ID},
+    )
+    assert response.status_code == 403
+    assert "Access denied: Device ID mismatch." in response.json()["detail"]
+
+
+def test_update_device_config_no_auth():
+    """Test updating config without authentication."""
+    response = client.put(
+        f"/api/device/{TEST_DEVICE_ID}/config",
+        json={"config": {"telemetry_interval": 30}},
+    )
+    assert response.status_code == 401
+    assert "Authentication required" in response.json()["detail"]
+
+
+def test_update_device_config_db_error(mock_db_error):
+    """Test update device config endpoint handles database errors."""
+    response = client.put(
+        f"/api/device/{TEST_DEVICE_ID}/config",
+        json={"config": {"telemetry_interval": 30}},
+        headers={"X-Device-Id": TEST_DEVICE_ID},
+    )
+    assert response.status_code == 500
+    assert "Failed to update configuration" in response.json()["detail"]
+
+
+# Admin device config endpoints tests
+
+def test_admin_update_device_config():
+    """Test admin updating device configuration."""
+    # Register the device
+    client.post(
+        "/api/register",
+        json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+    )
+
+    # Admin updates config
+    new_config = {
+        "telemetry_interval": 15,
+        "log_level": "WARNING",
+        "features": {"telemetry_enabled": False},
+    }
+    response = client.put(
+        f"/api/admin/device/{TEST_DEVICE_ID}/config",
+        json={"config": new_config},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    assert response.json()["message"] == "Configuration updated by admin"
+    assert response.json()["config"] == new_config
+
+
+def test_admin_update_device_config_device_not_found():
+    """Test admin updating config for non-existent device."""
+    response = client.put(
+        "/api/admin/device/non_existent_device/config",
+        json={"config": {"telemetry_interval": 30}},
+    )
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"]
+
+
+def test_admin_update_device_config_twice():
+    """Test admin updating device configuration multiple times."""
+    # Register the device
+    client.post(
+        "/api/register",
+        json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+    )
+
+    # First admin update
+    config_v1 = {"telemetry_interval": 15}
+    response = client.put(
+        f"/api/admin/device/{TEST_DEVICE_ID}/config",
+        json={"config": config_v1},
+    )
+    assert response.status_code == 200
+
+    # Second admin update
+    config_v2 = {"telemetry_interval": 300, "log_level": "CRITICAL"}
+    response = client.put(
+        f"/api/admin/device/{TEST_DEVICE_ID}/config",
+        json={"config": config_v2},
+    )
+    assert response.status_code == 200
+    assert response.json()["config"] == config_v2
+
+
+def test_admin_update_device_config_db_error(mock_db_error):
+    """Test admin update config endpoint handles database errors."""
+    response = client.put(
+        f"/api/admin/device/{TEST_DEVICE_ID}/config",
+        json={"config": {"telemetry_interval": 30}},
+    )
+    assert response.status_code == 500
+    assert "Failed to update configuration" in response.json()["detail"]
+
+
+def test_admin_get_device_config():
+    """Test admin getting device configuration."""
+    # Register the device
+    client.post(
+        "/api/register",
+        json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+    )
+
+    # Get config (should return defaults since no config set yet)
+    response = client.get(f"/api/admin/device/{TEST_DEVICE_ID}/config")
+    assert response.status_code == 200
+    assert response.json()["device_id"] == TEST_DEVICE_ID
+    assert response.json()["config"]["telemetry_interval"] == 60  # Default
+    assert response.json()["updated_at"] is None  # No custom config yet
+
+
+def test_admin_get_device_config_after_update():
+    """Test admin getting device configuration after it was updated."""
+    # Register the device
+    client.post(
+        "/api/register",
+        json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+    )
+
+    # Set config via admin endpoint
+    new_config = {"telemetry_interval": 45, "custom_field": "test_value"}
+    client.put(
+        f"/api/admin/device/{TEST_DEVICE_ID}/config",
+        json={"config": new_config},
+    )
+
+    # Get config
+    response = client.get(f"/api/admin/device/{TEST_DEVICE_ID}/config")
+    assert response.status_code == 200
+    assert response.json()["config"] == new_config
+    assert response.json()["updated_at"] is not None
+
+
+def test_admin_get_device_config_device_not_found():
+    """Test admin getting config for non-existent device."""
+    response = client.get("/api/admin/device/non_existent_device/config")
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"]
+
+
+def test_admin_get_device_config_db_error(mock_db_error):
+    """Test admin get config endpoint handles database errors."""
+    response = client.get(f"/api/admin/device/{TEST_DEVICE_ID}/config")
+    assert response.status_code == 500
+    assert "Failed to retrieve configuration" in response.json()["detail"]
+
+
+def test_config_persistence_between_device_and_admin():
+    """Test that config updates from device are visible to admin and vice versa."""
+    # Register the device
+    client.post(
+        "/api/register",
+        json={"device_id": TEST_DEVICE_ID, "public_key": TEST_PUBLIC_KEY},
+    )
+
+    # Device sets config
+    device_config = {"telemetry_interval": 25, "source": "device"}
+    client.put(
+        f"/api/device/{TEST_DEVICE_ID}/config",
+        json={"config": device_config},
+        headers={"X-Device-Id": TEST_DEVICE_ID},
+    )
+
+    # Admin should see it
+    response = client.get(f"/api/admin/device/{TEST_DEVICE_ID}/config")
+    assert response.json()["config"] == device_config
+
+    # Admin updates config
+    admin_config = {"telemetry_interval": 100, "source": "admin"}
+    client.put(
+        f"/api/admin/device/{TEST_DEVICE_ID}/config",
+        json={"config": admin_config},
+    )
+
+    # Device should see the admin's config
+    response = client.get(
+        f"/api/device/{TEST_DEVICE_ID}/config",
+        headers={"X-Device-Id": TEST_DEVICE_ID},
+    )
+    assert response.json()["config"] == admin_config
