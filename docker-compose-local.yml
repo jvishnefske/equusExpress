@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  fastapi:
+    build: .
+    container_name: fastapi-app
+    restart: unless-stopped
+    environment:
+      - PORT=8000
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.fastapi.rule=Host(`localhost`)"
+      - "traefik.http.routers.fastapi.entrypoints=web"
+      - "traefik.http.services.fastapi.loadbalancer.server.port=8000"
+
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "8080:8080"  # Dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - web
+    command:
+      # Entry points
+      - --entrypoints.web.address=:80
+      
+      # Docker provider
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      
+      # Dashboard
+      - --api.dashboard=true
+      - --api.insecure=true
+      
+      # Logging
+      - --log.level=DEBUG
+    labels:
+      - "traefik.enable=true"
+
+networks:
+  web:
+    driver: bridge
